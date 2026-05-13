@@ -5,16 +5,19 @@ module.exports = {
 
 var { g: global, __dirname } = __turbopack_context__;
 {
-/* __next_internal_action_entry_do_not_use__ [{"40112ec8e34532b4bc0f2a5909ec6c5152cdbae277":"deleteDepartment","401a42cfca4f313332d31405e4d6ea13d46291fbb9":"deleteDocumentType","402663939923206329bca9ab33e0e4fa3b5fb3157f":"deleteCategory","405f9cc52906db250a0d15693f117be0082abcfd5f":"createUser","406d5e7d34d3c5579a8317600e5bf732e865e941ae":"createCategory","408357bc0dadce3ab2b7519cf6ac460f790ff55d46":"deleteUser","4084a118381eb17da57da58189c0c8237c08bdcda2":"createDocumentType","40b3b143161cf3ca44f7c76d0126ecb68162ccebd7":"createDepartment","6003bab35dfd7195e8e2d047e6bab410273f14ce95":"resetPassword","603be53f139766e1713a71c4166429547ffa71d6bf":"updateDepartment","60f19dcf89802f00a177db30c36133b222b171e42c":"updateUser","60f55660eecb7b47115d2888b96790b51f14720dca":"updateDocumentType","60fa88fb707371277ef8f5718463c12ce710dd43c1":"updateCategory"},"",""] */ __turbopack_context__.s({
+/* __next_internal_action_entry_do_not_use__ [{"4000b994aa65ee48efdb3b73e6a40b0cbcdc600f21":"deleteCategory","403df13da586c2979678afb780e9f640cb219512d4":"deleteDocument","4046d91ffb95030a7f7dae0f937edd032db495541e":"createDocument","40714b4d87ff03057d3ca7368e707180c36d8c794c":"deleteDepartment","40850e9a2345830613affaf914f7848c45d143672e":"createUser","409d6a1092de31b391543b76f016322f24ce3f2636":"createCategory","40b4607e7ed1e90bd35221851375f202a8f105b524":"deleteDocumentType","40ea35100bd10142734fe53980f084a8c71ee81808":"createDepartment","40ec34ecfff043ef932f17e7b4c8cf0b1c9288df71":"createDocumentType","40f2914ff30b710836ed7f361eddb1c2fdb25709fd":"deleteUser","601ef7120e9e197a3175b743598f8feeb6042b539d":"updateDocumentType","6036c9aa9bf7580c081140afaf83ebfbb86189133b":"resetPassword","606b195ead655c26f66e49e2fba083657e1680bcab":"updateCategory","60d9c246f4194786bc43a5e1a7042a68bfb5f80390":"updateDepartment","60ef219fd12818e03f9d84cdb7753299eb6bad35d6":"updateUser","7c6067c675f8d494221d5b68c39b3ef01724a3e8f4":"saveDocumentFile"},"",""] */ __turbopack_context__.s({
     "createCategory": (()=>createCategory),
     "createDepartment": (()=>createDepartment),
+    "createDocument": (()=>createDocument),
     "createDocumentType": (()=>createDocumentType),
     "createUser": (()=>createUser),
     "deleteCategory": (()=>deleteCategory),
     "deleteDepartment": (()=>deleteDepartment),
+    "deleteDocument": (()=>deleteDocument),
     "deleteDocumentType": (()=>deleteDocumentType),
     "deleteUser": (()=>deleteUser),
     "resetPassword": (()=>resetPassword),
+    "saveDocumentFile": (()=>saveDocumentFile),
     "updateCategory": (()=>updateCategory),
     "updateDepartment": (()=>updateDepartment),
     "updateDocumentType": (()=>updateDocumentType),
@@ -325,6 +328,76 @@ async function deleteDepartment(id) {
         };
     }
 }
+async function createDocument(formData) {
+    const doc_number = formData.get('doc_number')?.trim();
+    const title = formData.get('title')?.trim();
+    const category_id = formData.get('category_id');
+    const type_id = formData.get('type_id');
+    const department_id = formData.get('department_id') || null;
+    const revision = parseInt(formData.get('revision')) || 1;
+    const effective_date = formData.get('effective_date');
+    const revision_date = formData.get('revision_date') || null;
+    const expiry_date = formData.get('expiry_date') || null;
+    const uploaded_by = formData.get('uploaded_by');
+    if (!doc_number || !title || !category_id || !type_id || !effective_date) {
+        return {
+            error: 'Field wajib belum lengkap.'
+        };
+    }
+    try {
+        const result = await sql`
+      INSERT INTO documents 
+        (doc_number, title, category_id, type_id, department_id, revision, 
+         effective_date, revision_date, expiry_date, uploaded_by, status)
+      VALUES 
+        (${doc_number}, ${title}, ${category_id}, ${type_id}, ${department_id}, 
+         ${revision}, ${effective_date}, ${revision_date}, ${expiry_date}, 
+         ${uploaded_by}, 'terbaru')
+      RETURNING id
+    `;
+        (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$cache$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["revalidatePath"])('/dashboard/documents');
+        return {
+            success: true,
+            id: result[0].id
+        };
+    } catch (error) {
+        if (error?.code === '23505') return {
+            error: 'Nomor dokumen dengan revisi ini sudah ada.'
+        };
+        return {
+            error: 'Gagal membuat dokumen.'
+        };
+    }
+}
+async function saveDocumentFile(documentId, fileLabel, fileUrl, fileName, fileType) {
+    try {
+        await sql`
+      INSERT INTO document_files (document_id, file_label, file_url, file_name, file_type)
+      VALUES (${documentId}, ${fileLabel}, ${fileUrl}, ${fileName}, ${fileType})
+      ON CONFLICT DO NOTHING
+    `;
+        return {
+            success: true
+        };
+    } catch  {
+        return {
+            error: 'Gagal menyimpan file.'
+        };
+    }
+}
+async function deleteDocument(id) {
+    try {
+        await sql`UPDATE documents SET status = 'dihapus', updated_at = NOW() WHERE id = ${id}`;
+        (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$cache$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["revalidatePath"])('/dashboard/documents');
+        return {
+            success: true
+        };
+    } catch  {
+        return {
+            error: 'Gagal menghapus dokumen.'
+        };
+    }
+}
 ;
 (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$webpack$2f$loaders$2f$next$2d$flight$2d$loader$2f$action$2d$validate$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["ensureServerEntryExports"])([
     createUser,
@@ -339,21 +412,27 @@ async function deleteDepartment(id) {
     deleteDocumentType,
     createDepartment,
     updateDepartment,
-    deleteDepartment
+    deleteDepartment,
+    createDocument,
+    saveDocumentFile,
+    deleteDocument
 ]);
-(0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$webpack$2f$loaders$2f$next$2d$flight$2d$loader$2f$server$2d$reference$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerServerReference"])(createUser, "405f9cc52906db250a0d15693f117be0082abcfd5f", null);
-(0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$webpack$2f$loaders$2f$next$2d$flight$2d$loader$2f$server$2d$reference$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerServerReference"])(updateUser, "60f19dcf89802f00a177db30c36133b222b171e42c", null);
-(0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$webpack$2f$loaders$2f$next$2d$flight$2d$loader$2f$server$2d$reference$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerServerReference"])(resetPassword, "6003bab35dfd7195e8e2d047e6bab410273f14ce95", null);
-(0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$webpack$2f$loaders$2f$next$2d$flight$2d$loader$2f$server$2d$reference$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerServerReference"])(deleteUser, "408357bc0dadce3ab2b7519cf6ac460f790ff55d46", null);
-(0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$webpack$2f$loaders$2f$next$2d$flight$2d$loader$2f$server$2d$reference$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerServerReference"])(createCategory, "406d5e7d34d3c5579a8317600e5bf732e865e941ae", null);
-(0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$webpack$2f$loaders$2f$next$2d$flight$2d$loader$2f$server$2d$reference$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerServerReference"])(updateCategory, "60fa88fb707371277ef8f5718463c12ce710dd43c1", null);
-(0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$webpack$2f$loaders$2f$next$2d$flight$2d$loader$2f$server$2d$reference$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerServerReference"])(deleteCategory, "402663939923206329bca9ab33e0e4fa3b5fb3157f", null);
-(0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$webpack$2f$loaders$2f$next$2d$flight$2d$loader$2f$server$2d$reference$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerServerReference"])(createDocumentType, "4084a118381eb17da57da58189c0c8237c08bdcda2", null);
-(0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$webpack$2f$loaders$2f$next$2d$flight$2d$loader$2f$server$2d$reference$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerServerReference"])(updateDocumentType, "60f55660eecb7b47115d2888b96790b51f14720dca", null);
-(0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$webpack$2f$loaders$2f$next$2d$flight$2d$loader$2f$server$2d$reference$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerServerReference"])(deleteDocumentType, "401a42cfca4f313332d31405e4d6ea13d46291fbb9", null);
-(0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$webpack$2f$loaders$2f$next$2d$flight$2d$loader$2f$server$2d$reference$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerServerReference"])(createDepartment, "40b3b143161cf3ca44f7c76d0126ecb68162ccebd7", null);
-(0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$webpack$2f$loaders$2f$next$2d$flight$2d$loader$2f$server$2d$reference$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerServerReference"])(updateDepartment, "603be53f139766e1713a71c4166429547ffa71d6bf", null);
-(0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$webpack$2f$loaders$2f$next$2d$flight$2d$loader$2f$server$2d$reference$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerServerReference"])(deleteDepartment, "40112ec8e34532b4bc0f2a5909ec6c5152cdbae277", null);
+(0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$webpack$2f$loaders$2f$next$2d$flight$2d$loader$2f$server$2d$reference$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerServerReference"])(createUser, "40850e9a2345830613affaf914f7848c45d143672e", null);
+(0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$webpack$2f$loaders$2f$next$2d$flight$2d$loader$2f$server$2d$reference$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerServerReference"])(updateUser, "60ef219fd12818e03f9d84cdb7753299eb6bad35d6", null);
+(0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$webpack$2f$loaders$2f$next$2d$flight$2d$loader$2f$server$2d$reference$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerServerReference"])(resetPassword, "6036c9aa9bf7580c081140afaf83ebfbb86189133b", null);
+(0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$webpack$2f$loaders$2f$next$2d$flight$2d$loader$2f$server$2d$reference$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerServerReference"])(deleteUser, "40f2914ff30b710836ed7f361eddb1c2fdb25709fd", null);
+(0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$webpack$2f$loaders$2f$next$2d$flight$2d$loader$2f$server$2d$reference$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerServerReference"])(createCategory, "409d6a1092de31b391543b76f016322f24ce3f2636", null);
+(0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$webpack$2f$loaders$2f$next$2d$flight$2d$loader$2f$server$2d$reference$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerServerReference"])(updateCategory, "606b195ead655c26f66e49e2fba083657e1680bcab", null);
+(0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$webpack$2f$loaders$2f$next$2d$flight$2d$loader$2f$server$2d$reference$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerServerReference"])(deleteCategory, "4000b994aa65ee48efdb3b73e6a40b0cbcdc600f21", null);
+(0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$webpack$2f$loaders$2f$next$2d$flight$2d$loader$2f$server$2d$reference$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerServerReference"])(createDocumentType, "40ec34ecfff043ef932f17e7b4c8cf0b1c9288df71", null);
+(0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$webpack$2f$loaders$2f$next$2d$flight$2d$loader$2f$server$2d$reference$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerServerReference"])(updateDocumentType, "601ef7120e9e197a3175b743598f8feeb6042b539d", null);
+(0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$webpack$2f$loaders$2f$next$2d$flight$2d$loader$2f$server$2d$reference$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerServerReference"])(deleteDocumentType, "40b4607e7ed1e90bd35221851375f202a8f105b524", null);
+(0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$webpack$2f$loaders$2f$next$2d$flight$2d$loader$2f$server$2d$reference$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerServerReference"])(createDepartment, "40ea35100bd10142734fe53980f084a8c71ee81808", null);
+(0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$webpack$2f$loaders$2f$next$2d$flight$2d$loader$2f$server$2d$reference$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerServerReference"])(updateDepartment, "60d9c246f4194786bc43a5e1a7042a68bfb5f80390", null);
+(0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$webpack$2f$loaders$2f$next$2d$flight$2d$loader$2f$server$2d$reference$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerServerReference"])(deleteDepartment, "40714b4d87ff03057d3ca7368e707180c36d8c794c", null);
+(0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$webpack$2f$loaders$2f$next$2d$flight$2d$loader$2f$server$2d$reference$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerServerReference"])(createDocument, "4046d91ffb95030a7f7dae0f937edd032db495541e", null);
+(0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$webpack$2f$loaders$2f$next$2d$flight$2d$loader$2f$server$2d$reference$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerServerReference"])(saveDocumentFile, "7c6067c675f8d494221d5b68c39b3ef01724a3e8f4", null);
+(0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$webpack$2f$loaders$2f$next$2d$flight$2d$loader$2f$server$2d$reference$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerServerReference"])(deleteDocument, "403df13da586c2979678afb780e9f640cb219512d4", null);
 }}),
 "[project]/.next-internal/server/app/dashboard/master/document-types/page/actions.js { ACTIONS_MODULE0 => \"[project]/app/lib/actions.ts [app-rsc] (ecmascript)\" } [app-rsc] (server actions loader, ecmascript) <locals>": ((__turbopack_context__) => {
 "use strict";
@@ -381,9 +460,9 @@ var __TURBOPACK__imported__module__$5b$project$5d2f2e$next$2d$internal$2f$server
 var { g: global, __dirname } = __turbopack_context__;
 {
 __turbopack_context__.s({
-    "401a42cfca4f313332d31405e4d6ea13d46291fbb9": (()=>__TURBOPACK__imported__module__$5b$project$5d2f$app$2f$lib$2f$actions$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["deleteDocumentType"]),
-    "4084a118381eb17da57da58189c0c8237c08bdcda2": (()=>__TURBOPACK__imported__module__$5b$project$5d2f$app$2f$lib$2f$actions$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["createDocumentType"]),
-    "60f55660eecb7b47115d2888b96790b51f14720dca": (()=>__TURBOPACK__imported__module__$5b$project$5d2f$app$2f$lib$2f$actions$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["updateDocumentType"])
+    "40b4607e7ed1e90bd35221851375f202a8f105b524": (()=>__TURBOPACK__imported__module__$5b$project$5d2f$app$2f$lib$2f$actions$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["deleteDocumentType"]),
+    "40ec34ecfff043ef932f17e7b4c8cf0b1c9288df71": (()=>__TURBOPACK__imported__module__$5b$project$5d2f$app$2f$lib$2f$actions$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["createDocumentType"]),
+    "601ef7120e9e197a3175b743598f8feeb6042b539d": (()=>__TURBOPACK__imported__module__$5b$project$5d2f$app$2f$lib$2f$actions$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["updateDocumentType"])
 });
 var __TURBOPACK__imported__module__$5b$project$5d2f$app$2f$lib$2f$actions$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/app/lib/actions.ts [app-rsc] (ecmascript)");
 var __TURBOPACK__imported__module__$5b$project$5d2f2e$next$2d$internal$2f$server$2f$app$2f$dashboard$2f$master$2f$document$2d$types$2f$page$2f$actions$2e$js__$7b$__ACTIONS_MODULE0__$3d3e$__$225b$project$5d2f$app$2f$lib$2f$actions$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$2922$__$7d$__$5b$app$2d$rsc$5d$__$28$server__actions__loader$2c$__ecmascript$29$__$3c$locals$3e$__ = __turbopack_context__.i('[project]/.next-internal/server/app/dashboard/master/document-types/page/actions.js { ACTIONS_MODULE0 => "[project]/app/lib/actions.ts [app-rsc] (ecmascript)" } [app-rsc] (server actions loader, ecmascript) <locals>');
@@ -394,9 +473,9 @@ var __TURBOPACK__imported__module__$5b$project$5d2f2e$next$2d$internal$2f$server
 var { g: global, __dirname } = __turbopack_context__;
 {
 __turbopack_context__.s({
-    "401a42cfca4f313332d31405e4d6ea13d46291fbb9": (()=>__TURBOPACK__imported__module__$5b$project$5d2f2e$next$2d$internal$2f$server$2f$app$2f$dashboard$2f$master$2f$document$2d$types$2f$page$2f$actions$2e$js__$7b$__ACTIONS_MODULE0__$3d3e$__$225b$project$5d2f$app$2f$lib$2f$actions$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$2922$__$7d$__$5b$app$2d$rsc$5d$__$28$server__actions__loader$2c$__ecmascript$29$__$3c$exports$3e$__["401a42cfca4f313332d31405e4d6ea13d46291fbb9"]),
-    "4084a118381eb17da57da58189c0c8237c08bdcda2": (()=>__TURBOPACK__imported__module__$5b$project$5d2f2e$next$2d$internal$2f$server$2f$app$2f$dashboard$2f$master$2f$document$2d$types$2f$page$2f$actions$2e$js__$7b$__ACTIONS_MODULE0__$3d3e$__$225b$project$5d2f$app$2f$lib$2f$actions$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$2922$__$7d$__$5b$app$2d$rsc$5d$__$28$server__actions__loader$2c$__ecmascript$29$__$3c$exports$3e$__["4084a118381eb17da57da58189c0c8237c08bdcda2"]),
-    "60f55660eecb7b47115d2888b96790b51f14720dca": (()=>__TURBOPACK__imported__module__$5b$project$5d2f2e$next$2d$internal$2f$server$2f$app$2f$dashboard$2f$master$2f$document$2d$types$2f$page$2f$actions$2e$js__$7b$__ACTIONS_MODULE0__$3d3e$__$225b$project$5d2f$app$2f$lib$2f$actions$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$2922$__$7d$__$5b$app$2d$rsc$5d$__$28$server__actions__loader$2c$__ecmascript$29$__$3c$exports$3e$__["60f55660eecb7b47115d2888b96790b51f14720dca"])
+    "40b4607e7ed1e90bd35221851375f202a8f105b524": (()=>__TURBOPACK__imported__module__$5b$project$5d2f2e$next$2d$internal$2f$server$2f$app$2f$dashboard$2f$master$2f$document$2d$types$2f$page$2f$actions$2e$js__$7b$__ACTIONS_MODULE0__$3d3e$__$225b$project$5d2f$app$2f$lib$2f$actions$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$2922$__$7d$__$5b$app$2d$rsc$5d$__$28$server__actions__loader$2c$__ecmascript$29$__$3c$exports$3e$__["40b4607e7ed1e90bd35221851375f202a8f105b524"]),
+    "40ec34ecfff043ef932f17e7b4c8cf0b1c9288df71": (()=>__TURBOPACK__imported__module__$5b$project$5d2f2e$next$2d$internal$2f$server$2f$app$2f$dashboard$2f$master$2f$document$2d$types$2f$page$2f$actions$2e$js__$7b$__ACTIONS_MODULE0__$3d3e$__$225b$project$5d2f$app$2f$lib$2f$actions$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$2922$__$7d$__$5b$app$2d$rsc$5d$__$28$server__actions__loader$2c$__ecmascript$29$__$3c$exports$3e$__["40ec34ecfff043ef932f17e7b4c8cf0b1c9288df71"]),
+    "601ef7120e9e197a3175b743598f8feeb6042b539d": (()=>__TURBOPACK__imported__module__$5b$project$5d2f2e$next$2d$internal$2f$server$2f$app$2f$dashboard$2f$master$2f$document$2d$types$2f$page$2f$actions$2e$js__$7b$__ACTIONS_MODULE0__$3d3e$__$225b$project$5d2f$app$2f$lib$2f$actions$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$2922$__$7d$__$5b$app$2d$rsc$5d$__$28$server__actions__loader$2c$__ecmascript$29$__$3c$exports$3e$__["601ef7120e9e197a3175b743598f8feeb6042b539d"])
 });
 var __TURBOPACK__imported__module__$5b$project$5d2f2e$next$2d$internal$2f$server$2f$app$2f$dashboard$2f$master$2f$document$2d$types$2f$page$2f$actions$2e$js__$7b$__ACTIONS_MODULE0__$3d3e$__$225b$project$5d2f$app$2f$lib$2f$actions$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$2922$__$7d$__$5b$app$2d$rsc$5d$__$28$server__actions__loader$2c$__ecmascript$29$__$3c$module__evaluation$3e$__ = __turbopack_context__.i('[project]/.next-internal/server/app/dashboard/master/document-types/page/actions.js { ACTIONS_MODULE0 => "[project]/app/lib/actions.ts [app-rsc] (ecmascript)" } [app-rsc] (server actions loader, ecmascript) <module evaluation>');
 var __TURBOPACK__imported__module__$5b$project$5d2f2e$next$2d$internal$2f$server$2f$app$2f$dashboard$2f$master$2f$document$2d$types$2f$page$2f$actions$2e$js__$7b$__ACTIONS_MODULE0__$3d3e$__$225b$project$5d2f$app$2f$lib$2f$actions$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$2922$__$7d$__$5b$app$2d$rsc$5d$__$28$server__actions__loader$2c$__ecmascript$29$__$3c$exports$3e$__ = __turbopack_context__.i('[project]/.next-internal/server/app/dashboard/master/document-types/page/actions.js { ACTIONS_MODULE0 => "[project]/app/lib/actions.ts [app-rsc] (ecmascript)" } [app-rsc] (server actions loader, ecmascript) <exports>');
@@ -421,7 +500,10 @@ var { g: global, __dirname } = __turbopack_context__;
 __turbopack_context__.s({
     "getCategories": (()=>getCategories),
     "getDepartments": (()=>getDepartments),
+    "getDocumentById": (()=>getDocumentById),
+    "getDocumentFiles": (()=>getDocumentFiles),
     "getDocumentTypes": (()=>getDocumentTypes),
+    "getDocumentsByCategory": (()=>getDocumentsByCategory),
     "getUsers": (()=>getUsers)
 });
 var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$postgres$2f$src$2f$index$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/node_modules/postgres/src/index.js [app-rsc] (ecmascript)");
@@ -465,6 +547,47 @@ async function getDepartments() {
     ORDER BY code ASC
   `;
     return departments;
+}
+async function getDocumentsByCategory(categoryId) {
+    const documents = await sql`
+    SELECT 
+      d.id, d.doc_number, d.title, d.revision,
+      d.effective_date, d.revision_date, d.expiry_date,
+      d.status, d.created_at, d.updated_at,
+      d.category_id, d.type_id, d.department_id,
+      dt.name AS type_name,
+      dep.code AS department_code,
+      dep.name AS department_name,
+      u.name AS uploaded_by_name
+    FROM documents d
+    JOIN document_types dt ON dt.id = d.type_id
+    LEFT JOIN departments dep ON dep.id = d.department_id
+    LEFT JOIN users u ON u.id = d.uploaded_by
+    WHERE d.category_id = ${categoryId}
+      AND d.status != 'dihapus'
+    ORDER BY d.doc_number ASC, d.revision DESC
+  `;
+    return documents;
+}
+async function getDocumentFiles(documentId) {
+    const files = await sql`
+    SELECT id, file_label, file_url, file_name, file_type
+    FROM document_files
+    WHERE document_id = ${documentId}
+  `;
+    return files;
+}
+async function getDocumentById(id) {
+    const doc = await sql`
+    SELECT d.*, dt.name AS type_name, 
+      dep.code AS department_code,
+      dep.name AS department_name
+    FROM documents d
+    JOIN document_types dt ON dt.id = d.type_id
+    LEFT JOIN departments dep ON dep.id = d.department_id
+    WHERE d.id = ${id}
+  `;
+    return doc[0];
 }
 }}),
 "[project]/app/ui/document-types-table.tsx (client reference/proxy) <module evaluation>": ((__turbopack_context__) => {

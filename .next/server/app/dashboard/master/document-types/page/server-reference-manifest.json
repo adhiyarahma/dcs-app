@@ -1,6 +1,6 @@
 {
   "node": {
-    "4084a118381eb17da57da58189c0c8237c08bdcda2": {
+    "40ec34ecfff043ef932f17e7b4c8cf0b1c9288df71": {
       "workers": {
         "app/dashboard/master/document-types/page": {
           "moduleId": "[project]/.next-internal/server/app/dashboard/master/document-types/page/actions.js { ACTIONS_MODULE0 => \"[project]/app/lib/actions.ts [app-rsc] (ecmascript)\" } [app-rsc] (server actions loader, ecmascript)",
@@ -11,7 +11,7 @@
         "app/dashboard/master/document-types/page": "action-browser"
       }
     },
-    "60f55660eecb7b47115d2888b96790b51f14720dca": {
+    "601ef7120e9e197a3175b743598f8feeb6042b539d": {
       "workers": {
         "app/dashboard/master/document-types/page": {
           "moduleId": "[project]/.next-internal/server/app/dashboard/master/document-types/page/actions.js { ACTIONS_MODULE0 => \"[project]/app/lib/actions.ts [app-rsc] (ecmascript)\" } [app-rsc] (server actions loader, ecmascript)",
@@ -22,7 +22,7 @@
         "app/dashboard/master/document-types/page": "action-browser"
       }
     },
-    "401a42cfca4f313332d31405e4d6ea13d46291fbb9": {
+    "40b4607e7ed1e90bd35221851375f202a8f105b524": {
       "workers": {
         "app/dashboard/master/document-types/page": {
           "moduleId": "[project]/.next-internal/server/app/dashboard/master/document-types/page/actions.js { ACTIONS_MODULE0 => \"[project]/app/lib/actions.ts [app-rsc] (ecmascript)\" } [app-rsc] (server actions loader, ecmascript)",

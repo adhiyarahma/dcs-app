@@ -1,0 +1,27 @@
+{
+  "node": {
+    "4095e99e243ce833cb7ed08ba8c25898948997c654": {
+      "workers": {
+        "app/dashboard/documents/create/page": {
+          "moduleId": "[project]/.next-internal/server/app/dashboard/documents/create/page/actions.js { ACTIONS_MODULE0 => \"[project]/app/lib/actions.ts [app-rsc] (ecmascript)\" } [app-rsc] (server actions loader, ecmascript)",
+          "async": false
+        }
+      },
+      "layer": {
+        "app/dashboard/documents/create/page": "action-browser"
+      }
+    },
+    "7c5423c496c634ee027303c2653a99e57908920c8f": {
+      "workers": {
+        "app/dashboard/documents/create/page": {
+          "moduleId": "[project]/.next-internal/server/app/dashboard/documents/create/page/actions.js { ACTIONS_MODULE0 => \"[project]/app/lib/actions.ts [app-rsc] (ecmascript)\" } [app-rsc] (server actions loader, ecmascript)",
+          "async": false
+        }
+      },
+      "layer": {
+        "app/dashboard/documents/create/page": "action-browser"
+      }
+    }
+  },
+  "edge": {}
+}

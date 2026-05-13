@@ -1,11 +1,8 @@
 {
-  "/(auth)/login/page": "app/(auth)/login/page.js",
   "/_not-found/page": "app/_not-found/page.js",
-  "/api/auth/[...nextauth]/route": "app/api/auth/[...nextauth]/route.js",
-  "/dashboard/master/categories/page": "app/dashboard/master/categories/page.js",
-  "/dashboard/master/departments/page": "app/dashboard/master/departments/page.js",
-  "/dashboard/master/document-types/page": "app/dashboard/master/document-types/page.js",
-  "/dashboard/page": "app/dashboard/page.js",
-  "/dashboard/users/page": "app/dashboard/users/page.js",
-  "/page": "app/page.js"
+  "/api/upload/route": "app/api/upload/route.js",
+  "/dashboard/documents/create/page": "app/dashboard/documents/create/page.js",
+  "/dashboard/documents/edit/[id]/page": "app/dashboard/documents/edit/[id]/page.js",
+  "/dashboard/documents/page": "app/dashboard/documents/page.js",
+  "/dashboard/page": "app/dashboard/page.js"
 }

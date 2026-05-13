@@ -218,3 +218,116 @@ export async function deleteDepartment(id: string) {
     return { error: 'Gagal menghapus departemen.' };
   }
 }
+
+// ============================================================
+// DOCUMENTS
+// ============================================================
+export async function createDocument(formData: FormData) {
+  const doc_number = (formData.get('doc_number') as string)?.trim();
+  const title = (formData.get('title') as string)?.trim();
+  const category_id = formData.get('category_id') as string;
+  const type_id = formData.get('type_id') as string;
+  const department_id = formData.get('department_id') as string || null;
+  const revision = parseInt(formData.get('revision') as string) || 1;
+  const effective_date = formData.get('effective_date') as string;
+  const revision_date = formData.get('revision_date') as string || null;
+  const expiry_date = formData.get('expiry_date') as string || null;
+  const uploaded_by = formData.get('uploaded_by') as string;
+
+  if (!doc_number || !title || !category_id || !type_id || !effective_date) {
+    return { error: 'Field wajib belum lengkap.' };
+  }
+
+  try {
+    const result = await sql`
+      INSERT INTO documents 
+        (doc_number, title, category_id, type_id, department_id, revision, 
+         effective_date, revision_date, expiry_date, uploaded_by, status)
+      VALUES 
+        (${doc_number}, ${title}, ${category_id}, ${type_id}, ${department_id}, 
+         ${revision}, ${effective_date}, ${revision_date}, ${expiry_date}, 
+         ${uploaded_by}, 'terbaru')
+      RETURNING id
+    `;
+    revalidatePath('/dashboard/documents');
+    return { success: true, id: result[0].id };
+  } catch (error: any) {
+    if (error?.code === '23505') return { error: 'Nomor dokumen dengan revisi ini sudah ada.' };
+    return { error: 'Gagal membuat dokumen.' };
+  }
+}
+
+export async function saveDocumentFile(
+  documentId: string,
+  fileLabel: string,
+  fileUrl: string,
+  fileName: string,
+  fileType: string
+) {
+  try {
+    await sql`
+      INSERT INTO document_files (document_id, file_label, file_url, file_name, file_type)
+      VALUES (${documentId}, ${fileLabel}, ${fileUrl}, ${fileName}, ${fileType})
+      ON CONFLICT DO NOTHING
+    `;
+    return { success: true };
+  } catch {
+    return { error: 'Gagal menyimpan file.' };
+  }
+}
+
+export async function deleteDocument(id: string) {
+  try {
+    await sql`UPDATE documents SET status = 'dihapus', updated_at = NOW() WHERE id = ${id}`;
+    revalidatePath('/dashboard/documents');
+    return { success: true };
+  } catch {
+    return { error: 'Gagal menghapus dokumen.' };
+  }
+}
+
+// ============================================================
+// UPDATE DOCUMENT
+// ============================================================
+export async function updateDocument(id: string, formData: FormData) {
+  const title = (formData.get('title') as string)?.trim();
+  const doc_number = (formData.get('doc_number') as string)?.trim();
+  const revision = parseInt(formData.get('revision') as string) || 1;
+  const department_id = formData.get('department_id') as string || null;
+  const effective_date = formData.get('effective_date') as string;
+  const revision_date = formData.get('revision_date') as string || null;
+  const expiry_date = formData.get('expiry_date') as string || null;
+
+  if (!title || !doc_number || !effective_date) {
+    return { error: 'Field wajib belum lengkap.' };
+  }
+
+  try {
+    await sql`
+      UPDATE documents SET
+        title = ${title},
+        doc_number = ${doc_number},
+        revision = ${revision},
+        department_id = ${department_id},
+        effective_date = ${effective_date},
+        revision_date = ${revision_date},
+        expiry_date = ${expiry_date},
+        updated_at = NOW()
+      WHERE id = ${id}
+    `;
+    revalidatePath('/dashboard/documents');
+    return { success: true };
+  } catch (error: any) {
+    if (error?.code === '23505') return { error: 'Nomor dokumen dengan revisi ini sudah ada.' };
+    return { error: 'Gagal mengupdate dokumen.' };
+  }
+}
+
+export async function deleteDocumentFile(fileId: string) {
+  try {
+    await sql`DELETE FROM document_files WHERE id = ${fileId}`;
+    return { success: true };
+  } catch {
+    return { error: 'Gagal menghapus file.' };
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "node": {
+    "60ee50471e25dd0ac8e29631185f36f5e21bb3aa81": {
+      "workers": {
+        "app/dashboard/documents/edit/[id]/page": {
+          "moduleId": "[project]/.next-internal/server/app/dashboard/documents/edit/[id]/page/actions.js { ACTIONS_MODULE0 => \"[project]/app/lib/actions.ts [app-rsc] (ecmascript)\" } [app-rsc] (server actions loader, ecmascript)",
+          "async": false
+        }
+      },
+      "layer": {
+        "app/dashboard/documents/edit/[id]/page": "action-browser"
+      }
+    },
+    "7c5423c496c634ee027303c2653a99e57908920c8f": {
+      "workers": {
+        "app/dashboard/documents/edit/[id]/page": {
+          "moduleId": "[project]/.next-internal/server/app/dashboard/documents/edit/[id]/page/actions.js { ACTIONS_MODULE0 => \"[project]/app/lib/actions.ts [app-rsc] (ecmascript)\" } [app-rsc] (server actions loader, ecmascript)",
+          "async": false
+        }
+      },
+      "layer": {
+        "app/dashboard/documents/edit/[id]/page": "action-browser"
+      }
+    },
+    "407ecc889fe1cd05a779e984b11f187d29ef436543": {
+      "workers": {
+        "app/dashboard/documents/edit/[id]/page": {
+          "moduleId": "[project]/.next-internal/server/app/dashboard/documents/edit/[id]/page/actions.js { ACTIONS_MODULE0 => \"[project]/app/lib/actions.ts [app-rsc] (ecmascript)\" } [app-rsc] (server actions loader, ecmascript)",
+          "async": false
+        }
+      },
+      "layer": {
+        "app/dashboard/documents/edit/[id]/page": "action-browser"
+      }
+    }
+  },
+  "edge": {}
+}

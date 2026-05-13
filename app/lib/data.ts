@@ -54,3 +54,63 @@ export async function getDepartments() {
   `;
   return departments;
 }
+
+// ============================================================
+// DOCUMENTS
+// ============================================================
+export async function getDocumentsByCategory(categoryId: string) {
+  const documents = await sql`
+    SELECT 
+      d.id, d.doc_number, d.title, d.revision,
+      d.effective_date, d.revision_date, d.expiry_date,
+      d.status, d.created_at, d.updated_at,
+      d.category_id, d.type_id, d.department_id,
+      dt.name AS type_name,
+      dep.code AS department_code,
+      dep.name AS department_name,
+      u.name AS uploaded_by_name
+    FROM documents d
+    JOIN document_types dt ON dt.id = d.type_id
+    LEFT JOIN departments dep ON dep.id = d.department_id
+    LEFT JOIN users u ON u.id = d.uploaded_by
+    WHERE d.category_id = ${categoryId}
+      AND d.status != 'dihapus'
+    ORDER BY d.doc_number ASC, d.revision DESC
+  `;
+
+  // Fetch files untuk setiap dokumen
+  const documentsWithFiles = await Promise.all(
+    documents.map(async (doc) => {
+      const files = await sql`
+        SELECT id, file_label, file_url, file_name, file_type
+        FROM document_files
+        WHERE document_id = ${doc.id as string}
+      `;
+      return { ...doc, files };
+    })
+  );
+
+  return documentsWithFiles;
+}
+
+export async function getDocumentById(id: string) {
+  const doc = await sql`
+    SELECT d.*, dt.name AS type_name,
+      dep.code AS department_code,
+      dep.name AS department_name
+    FROM documents d
+    JOIN document_types dt ON dt.id = d.type_id
+    LEFT JOIN departments dep ON dep.id = d.department_id
+    WHERE d.id = ${id}
+  `;
+
+  if (!doc[0]) return null;
+
+  const files = await sql`
+    SELECT id, file_label, file_url, file_name, file_type
+    FROM document_files
+    WHERE document_id = ${id}
+  `;
+
+  return { ...doc[0], files };
+}
