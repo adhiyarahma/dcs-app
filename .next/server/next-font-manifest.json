@@ -6,7 +6,13 @@
     "[project]/app/_not-found/page": [
       "static/media/LDIoaomQNQcsA88c7O9yZ4KMCoOg4Ko20yygg_vb-s.p.20b09c80.woff2"
     ],
-    "[project]/app/dashboard/documents/page": [
+    "[project]/app/dashboard/master/categories/page": [
+      "static/media/LDIoaomQNQcsA88c7O9yZ4KMCoOg4Ko20yygg_vb-s.p.20b09c80.woff2"
+    ],
+    "[project]/app/dashboard/master/departments/page": [
+      "static/media/LDIoaomQNQcsA88c7O9yZ4KMCoOg4Ko20yygg_vb-s.p.20b09c80.woff2"
+    ],
+    "[project]/app/dashboard/master/document-types/page": [
       "static/media/LDIoaomQNQcsA88c7O9yZ4KMCoOg4Ko20yygg_vb-s.p.20b09c80.woff2"
     ],
     "[project]/app/dashboard/page": [

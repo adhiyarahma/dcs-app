@@ -1,0 +1,71 @@
+{
+  "node": {
+    "406d5e7d34d3c5579a8317600e5bf732e865e941ae": {
+      "workers": {
+        "app/dashboard/master/departments/page": {
+          "moduleId": "[project]/.next-internal/server/app/dashboard/master/departments/page/actions.js { ACTIONS_MODULE0 => \"[project]/app/lib/actions.ts [app-rsc] (ecmascript)\" } [app-rsc] (server actions loader, ecmascript)",
+          "async": false
+        }
+      },
+      "layer": {
+        "app/dashboard/master/departments/page": "action-browser"
+      }
+    },
+    "60fa88fb707371277ef8f5718463c12ce710dd43c1": {
+      "workers": {
+        "app/dashboard/master/departments/page": {
+          "moduleId": "[project]/.next-internal/server/app/dashboard/master/departments/page/actions.js { ACTIONS_MODULE0 => \"[project]/app/lib/actions.ts [app-rsc] (ecmascript)\" } [app-rsc] (server actions loader, ecmascript)",
+          "async": false
+        }
+      },
+      "layer": {
+        "app/dashboard/master/departments/page": "action-browser"
+      }
+    },
+    "402663939923206329bca9ab33e0e4fa3b5fb3157f": {
+      "workers": {
+        "app/dashboard/master/departments/page": {
+          "moduleId": "[project]/.next-internal/server/app/dashboard/master/departments/page/actions.js { ACTIONS_MODULE0 => \"[project]/app/lib/actions.ts [app-rsc] (ecmascript)\" } [app-rsc] (server actions loader, ecmascript)",
+          "async": false
+        }
+      },
+      "layer": {
+        "app/dashboard/master/departments/page": "action-browser"
+      }
+    },
+    "40b3b143161cf3ca44f7c76d0126ecb68162ccebd7": {
+      "workers": {
+        "app/dashboard/master/departments/page": {
+          "moduleId": "[project]/.next-internal/server/app/dashboard/master/departments/page/actions.js { ACTIONS_MODULE0 => \"[project]/app/lib/actions.ts [app-rsc] (ecmascript)\" } [app-rsc] (server actions loader, ecmascript)",
+          "async": false
+        }
+      },
+      "layer": {
+        "app/dashboard/master/departments/page": "action-browser"
+      }
+    },
+    "603be53f139766e1713a71c4166429547ffa71d6bf": {
+      "workers": {
+        "app/dashboard/master/departments/page": {
+          "moduleId": "[project]/.next-internal/server/app/dashboard/master/departments/page/actions.js { ACTIONS_MODULE0 => \"[project]/app/lib/actions.ts [app-rsc] (ecmascript)\" } [app-rsc] (server actions loader, ecmascript)",
+          "async": false
+        }
+      },
+      "layer": {
+        "app/dashboard/master/departments/page": "action-browser"
+      }
+    },
+    "40112ec8e34532b4bc0f2a5909ec6c5152cdbae277": {
+      "workers": {
+        "app/dashboard/master/departments/page": {
+          "moduleId": "[project]/.next-internal/server/app/dashboard/master/departments/page/actions.js { ACTIONS_MODULE0 => \"[project]/app/lib/actions.ts [app-rsc] (ecmascript)\" } [app-rsc] (server actions loader, ecmascript)",
+          "async": false
+        }
+      },
+      "layer": {
+        "app/dashboard/master/departments/page": "action-browser"
+      }
+    }
+  },
+  "edge": {}
+}

@@ -2,74 +2,103 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { 
-  HomeIcon, 
-  DocumentTextIcon, 
-  UsersIcon, 
-  ArrowRightOnRectangleIcon,
-  ShieldCheckIcon 
+import { useState } from 'react';
+import {
+  HomeIcon, DocumentTextIcon, UsersIcon,
+  CircleStackIcon, ChevronDownIcon, ChevronRightIcon,
+  TagIcon, DocumentDuplicateIcon, BuildingOfficeIcon,
 } from '@heroicons/react/24/outline';
 import { signOut } from 'next-auth/react';
 import clsx from 'clsx';
 
-const navItems = [
-  { href: '/dashboard', label: 'DASHBOARD', icon: HomeIcon },
-  { href: '/dashboard/documents', label: 'DOKUMEN', icon: DocumentTextIcon },
-  { href: '/dashboard/users', label: 'PENGGUNA', icon: UsersIcon },
+const masterItems = [
+  { href: '/dashboard/master/categories', label: 'Kategori', icon: TagIcon },
+  { href: '/dashboard/master/document-types', label: 'Jenis Dokumen', icon: DocumentDuplicateIcon },
+  { href: '/dashboard/master/departments', label: 'Departemen', icon: BuildingOfficeIcon },
 ];
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const isMasterActive = pathname.startsWith('/dashboard/master');
+  const [masterOpen, setMasterOpen] = useState(isMasterActive);
 
   return (
-    <aside className="w-[260px] min-h-screen bg-dcc-950 flex flex-col z-50 shadow-2xl">
-      {/* Header Logo Section - Deep Navy Background */}
-      <div className="h-20 flex items-center px-6 gap-3 border-b border-white/5">
-        <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-600/30">
-          <ShieldCheckIcon className="w-6 h-6 text-white" />
-        </div>
-        <div className="leading-tight">
-          <h1 className="text-[16px] font-extrabold text-white tracking-tight">DCS APP</h1>
-          <p className="text-[10px] text-blue-400 font-bold uppercase tracking-widest">Document Control</p>
-        </div>
+    <aside className="w-64 min-h-screen bg-[#0f172a] text-white flex flex-col">
+      <div className="px-6 py-6 border-b border-white/10">
+        <h1 className="text-xl font-bold">DCS App</h1>
+        <p className="text-white/40 text-xs mt-1">Document Control System</p>
       </div>
 
-      {/* Navigation */}
-      <nav className="flex-1 px-4 py-8 space-y-2">
-        <p className="px-4 text-[10px] font-bold text-slate-500 uppercase tracking-[2px] mb-4">Main Navigation</p>
-        
-        {navItems.map((item) => {
-          const Icon = item.icon;
-          const isActive = pathname === item.href;
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={clsx(
-                'flex items-center gap-3 px-4 py-3 rounded-xl text-[13.5px] font-medium transition-all duration-300 group',
-                isActive
-                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20'
-                  : 'text-slate-400 hover:bg-white/5 hover:text-white'
-              )}
-            >
-              <Icon className={clsx(
-                'w-5 h-5 transition-colors',
-                isActive ? 'text-white' : 'text-slate-500 group-hover:text-blue-400'
-              )} />
-              <span className="tracking-wide">{item.label}</span>
-            </Link>
-          );
-        })}
+      <nav className="flex-1 px-4 py-4 space-y-1">
+        {/* Dashboard */}
+        <Link href="/dashboard"
+          className={clsx('flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
+            pathname === '/dashboard' ? 'bg-blue-600 text-white' : 'text-white/60 hover:bg-white/10 hover:text-white'
+          )}>
+          <HomeIcon className="w-5 h-5" />
+          Dashboard
+        </Link>
+
+        {/* Dokumen */}
+        <Link href="/dashboard/documents"
+          className={clsx('flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
+            pathname.startsWith('/dashboard/documents') ? 'bg-blue-600 text-white' : 'text-white/60 hover:bg-white/10 hover:text-white'
+          )}>
+          <DocumentTextIcon className="w-5 h-5" />
+          Dokumen
+        </Link>
+
+        {/* Master Data Dropdown */}
+        <div>
+          <button
+            onClick={() => setMasterOpen(!masterOpen)}
+            className={clsx('w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-colors',
+              isMasterActive ? 'bg-white/10 text-white' : 'text-white/60 hover:bg-white/10 hover:text-white'
+            )}>
+            <div className="flex items-center gap-3">
+              <CircleStackIcon className="w-5 h-5" />
+              Master Data
+            </div>
+            {masterOpen
+              ? <ChevronDownIcon className="w-4 h-4" />
+              : <ChevronRightIcon className="w-4 h-4" />}
+          </button>
+
+          {masterOpen && (
+            <div className="mt-1 ml-4 pl-4 border-l border-white/10 space-y-1">
+              {masterItems.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <Link key={item.href} href={item.href}
+                    className={clsx('flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
+                      pathname === item.href ? 'bg-blue-600 text-white' : 'text-white/50 hover:bg-white/10 hover:text-white'
+                    )}>
+                    <Icon className="w-4 h-4" />
+                    {item.label}
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Pengguna */}
+        <Link href="/dashboard/users"
+          className={clsx('flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
+            pathname.startsWith('/dashboard/users') ? 'bg-blue-600 text-white' : 'text-white/60 hover:bg-white/10 hover:text-white'
+          )}>
+          <UsersIcon className="w-5 h-5" />
+          Pengguna
+        </Link>
       </nav>
 
-      {/* User Info & Logout Section */}
-      <div className="p-4 bg-black/20 mt-auto border-t border-white/5">
+      <div className="px-4 py-4 border-t border-white/10">
         <button
           onClick={() => signOut({ callbackUrl: '/login' })}
-          className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-[13.5px] font-semibold text-slate-400 hover:bg-red-500/10 hover:text-red-400 transition-all duration-300"
+          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-white/50 hover:bg-white/10 hover:text-white transition-colors"
         >
-          <ArrowRightOnRectangleIcon className="w-5 h-5" />
-          <span>LOGOUT</span>
+          <span>→</span>
+          Logout
         </button>
       </div>
     </aside>

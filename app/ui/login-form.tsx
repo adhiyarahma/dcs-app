@@ -3,6 +3,8 @@
 import { useState } from 'react';
 import { signIn } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
+import { Mail, Lock, Loader2, AlertCircle } from 'lucide-react';
+import { motion } from 'framer-motion';
 
 export default function LoginForm() {
   const router = useRouter();
@@ -30,40 +32,74 @@ export default function LoginForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="bg-white p-8 rounded-lg shadow-md">
-      <div className="mb-4">
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          Email
-        </label>
-        <input
-          name="email"
-          type="email"
-          required
-          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          placeholder="admin@example.com"
-        />
-      </div>
-      <div className="mb-6">
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          Password
-        </label>
-        <input
-          name="password"
-          type="password"
-          required
-          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-      </div>
-      {error && (
-        <p className="text-red-500 text-sm mb-4">{error}</p>
-      )}
-      <button
-        type="submit"
-        disabled={loading}
-        className="w-full bg-blue-600 text-white py-2 rounded-md text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
-      >
-        {loading ? 'Masuk...' : 'Masuk'}
-      </button>
-    </form>
+    <div className="bg-white p-8 rounded-[2rem] shadow-xl shadow-slate-200/60 border border-slate-100">
+      <form onSubmit={handleSubmit} className="space-y-5">
+        {/* Input Email */}
+        <div>
+          <label className="block text-sm font-semibold text-slate-700 mb-1.5 ml-1">
+            Email
+          </label>
+          <div className="relative group">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <Mail className="h-5 w-5 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
+            </div>
+            <input
+              name="email"
+              type="email"
+              required
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all placeholder:text-slate-400"
+              placeholder="nama@gmail.com"
+            />
+          </div>
+        </div>
+
+        {/* Input Password */}
+        <div>
+          <label className="block text-sm font-semibold text-slate-700 mb-1.5 ml-1">
+            Password
+          </label>
+          <div className="relative group">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <Lock className="h-5 w-5 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
+            </div>
+            <input
+              name="password"
+              type="password"
+              required
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all placeholder:text-slate-400"
+              placeholder="••••••••"
+            />
+          </div>
+        </div>
+
+        {/* Error Message */}
+        {error && (
+          <motion.div 
+            initial={{ opacity: 0, x: -10 }}
+            animate={{ opacity: 1, x: 0 }}
+            className="flex items-center gap-2 p-3 bg-red-50 border border-red-100 rounded-lg text-red-600 text-sm"
+          >
+            <AlertCircle size={16} />
+            {error}
+          </motion.div>
+        )}
+
+        {/* Submit Button */}
+        <button
+          type="submit"
+          disabled={loading}
+          className="w-full bg-slate-900 text-white py-3.5 rounded-xl text-sm font-bold hover:bg-slate-800 active:scale-[0.98] transition-all disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg shadow-slate-200"
+        >
+          {loading ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Memproses...
+            </>
+          ) : (
+            'Masuk'
+          )}
+        </button>
+      </form>
+    </div>
   );
 }
