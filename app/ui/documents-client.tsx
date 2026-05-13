@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import clsx from 'clsx';
 import {
   MagnifyingGlassIcon, PlusIcon, PencilIcon, TrashIcon,
-  ArrowDownTrayIcon, DocumentIcon, ExclamationTriangleIcon,
+  ArrowDownTrayIcon, ArrowUpTrayIcon, DocumentIcon, ExclamationTriangleIcon,
 } from '@heroicons/react/24/outline';
 import { deleteDocument } from '@/app/lib/actions';
 
@@ -308,15 +308,29 @@ export default function DocumentsClient({ documentsPerCategory, role, userId }: 
           <h1 className="text-2xl font-bold text-slate-800">Dokumen</h1>
           <p className="text-sm text-slate-400 mt-1">Kelola seluruh dokumen perusahaan</p>
         </div>
-        {role === 'admin' && (
-          <button
-            onClick={() => router.push('/dashboard/documents/create')}
-            className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-[10px] text-[13.5px] font-bold hover:bg-blue-700 transition-all shadow-md shadow-blue-500/20 active:scale-95"
-          >
-            <PlusIcon className="w-4 h-4" />
-            TAMBAH DOKUMEN
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          <a href="/api/export-documents"
+            className="flex items-center gap-2 bg-white border border-slate-200 text-slate-600 px-4 py-2 rounded-[10px] text-[13.5px] font-bold hover:bg-slate-50 transition-all shadow-sm active:scale-95">
+            <ArrowDownTrayIcon className="w-4 h-4" />
+            EXPORT
+          </a>
+          {role === 'admin' && (
+            <>
+              <button
+                onClick={() => router.push('/dashboard/documents/import')}
+                className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-[10px] text-[13.5px] font-bold hover:bg-emerald-700 transition-all shadow-md shadow-emerald-500/20 active:scale-95">
+                <ArrowUpTrayIcon className="w-4 h-4" />
+                IMPORT
+              </button>
+              <button
+                onClick={() => router.push('/dashboard/documents/create')}
+                className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-[10px] text-[13.5px] font-bold hover:bg-blue-700 transition-all shadow-md shadow-blue-500/20 active:scale-95">
+                <PlusIcon className="w-4 h-4" />
+                TAMBAH
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Tabs */}

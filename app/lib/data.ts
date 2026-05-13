@@ -95,7 +95,11 @@ export async function getDocumentsByCategory(categoryId: string) {
 
 export async function getDocumentById(id: string) {
   const doc = await sql`
-    SELECT d.*, dt.name AS type_name,
+    SELECT d.id, d.doc_number, d.title, d.revision, d.status, d.category_id, d.type_id, d.department_id,
+      TO_CHAR(d.effective_date, 'YYYY-MM-DD') AS effective_date,
+      TO_CHAR(d.revision_date, 'YYYY-MM-DD') AS revision_date,
+      TO_CHAR(d.expiry_date, 'YYYY-MM-DD') AS expiry_date,
+      dt.name AS type_name,
       dep.code AS department_code,
       dep.name AS department_name
     FROM documents d

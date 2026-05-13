@@ -1,8 +1,13 @@
 {
   "/_not-found/page": "app/_not-found/page.js",
+  "/api/export-documents/template/route": "app/api/export-documents/template/route.js",
+  "/api/import-documents/route": "app/api/import-documents/route.js",
+  "/api/import-zip/route": "app/api/import-zip/route.js",
+  "/api/master-data/route": "app/api/master-data/route.js",
   "/api/upload/route": "app/api/upload/route.js",
   "/dashboard/documents/create/page": "app/dashboard/documents/create/page.js",
   "/dashboard/documents/edit/[id]/page": "app/dashboard/documents/edit/[id]/page.js",
+  "/dashboard/documents/import/page": "app/dashboard/documents/import/page.js",
   "/dashboard/documents/page": "app/dashboard/documents/page.js",
   "/dashboard/page": "app/dashboard/page.js"
 }

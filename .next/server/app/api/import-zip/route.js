@@ -1,0 +1,12 @@
+const CHUNK_PUBLIC_PATH = "server/app/api/import-zip/route.js";
+const runtime = require("../../../chunks/[turbopack]_runtime.js");
+runtime.loadChunk("server/chunks/node_modules_next_5a1b55be._.js");
+runtime.loadChunk("server/chunks/node_modules_25ab8926._.js");
+runtime.loadChunk("server/chunks/node_modules_bluebird_js_release_f0e0c7fb._.js");
+runtime.loadChunk("server/chunks/node_modules_@supabase_postgrest-js_dist_index_mjs_17448eff._.js");
+runtime.loadChunk("server/chunks/node_modules_@supabase_auth-js_dist_module_28f32ba7._.js");
+runtime.loadChunk("server/chunks/node_modules_1f87261d._.js");
+runtime.loadChunk("server/chunks/[root-of-the-server]__de81470d._.js");
+runtime.getOrInstantiateRuntimeModule("[project]/.next-internal/server/app/api/import-zip/route/actions.js [app-rsc] (server actions loader, ecmascript)", CHUNK_PUBLIC_PATH);
+runtime.getOrInstantiateRuntimeModule("[project]/node_modules/next/dist/esm/build/templates/app-route.js { INNER_APP_ROUTE => \"[project]/app/api/import-zip/route.ts [app-route] (ecmascript)\" } [app-route] (ecmascript)", CHUNK_PUBLIC_PATH);
+module.exports = runtime.getOrInstantiateRuntimeModule("[project]/node_modules/next/dist/esm/build/templates/app-route.js { INNER_APP_ROUTE => \"[project]/app/api/import-zip/route.ts [app-route] (ecmascript)\" } [app-route] (ecmascript)", CHUNK_PUBLIC_PATH).exports;
