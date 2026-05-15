@@ -1,11 +1,9 @@
 'use server';
 
-import postgres from 'postgres';
 import bcrypt from 'bcrypt';
 import { z } from 'zod';
 import { revalidatePath } from 'next/cache';
-
-const sql = postgres(process.env.POSTGRES_URL!, { ssl: 'require' });
+import { supabaseAdmin } from '@/app/lib/supabase';
 
 // ============================================================
 // USERS
@@ -39,11 +37,16 @@ export async function createUser(formData: FormData) {
   const { name, email, password, role } = parsed.data;
   try {
     const hashedPassword = await bcrypt.hash(password, 10);
-    await sql`INSERT INTO users (name, email, password, role) VALUES (${name}, ${email}, ${hashedPassword}, ${role})`;
+    const { error } = await supabaseAdmin
+      .from('users')
+      .insert({ name, email, password: hashedPassword, role });
+    if (error) {
+      if (error.code === '23505') return { error: 'Email sudah terdaftar.' };
+      return { error: 'Gagal membuat user.' };
+    }
     revalidatePath('/dashboard/users');
     return { success: true };
-  } catch (error: any) {
-    if (error?.code === '23505') return { error: 'Email sudah terdaftar.' };
+  } catch {
     return { error: 'Gagal membuat user.' };
   }
 }
@@ -57,11 +60,17 @@ export async function updateUser(id: string, formData: FormData) {
   if (!parsed.success) return { error: parsed.error.errors[0].message };
   const { name, email, role } = parsed.data;
   try {
-    await sql`UPDATE users SET name = ${name}, email = ${email}, role = ${role} WHERE id = ${id}`;
+    const { error } = await supabaseAdmin
+      .from('users')
+      .update({ name, email, role })
+      .eq('id', id);
+    if (error) {
+      if (error.code === '23505') return { error: 'Email sudah terdaftar.' };
+      return { error: 'Gagal mengupdate user.' };
+    }
     revalidatePath('/dashboard/users');
     return { success: true };
-  } catch (error: any) {
-    if (error?.code === '23505') return { error: 'Email sudah terdaftar.' };
+  } catch {
     return { error: 'Gagal mengupdate user.' };
   }
 }
@@ -76,7 +85,11 @@ export async function resetPassword(id: string, formData: FormData) {
   if (password !== confirmPassword) return { error: 'Password tidak cocok.' };
   try {
     const hashedPassword = await bcrypt.hash(password, 10);
-    await sql`UPDATE users SET password = ${hashedPassword} WHERE id = ${id}`;
+    const { error } = await supabaseAdmin
+      .from('users')
+      .update({ password: hashedPassword })
+      .eq('id', id);
+    if (error) return { error: 'Gagal mereset password.' };
     revalidatePath('/dashboard/users');
     return { success: true };
   } catch {
@@ -86,7 +99,8 @@ export async function resetPassword(id: string, formData: FormData) {
 
 export async function deleteUser(id: string) {
   try {
-    await sql`DELETE FROM users WHERE id = ${id}`;
+    const { error } = await supabaseAdmin.from('users').delete().eq('id', id);
+    if (error) return { error: 'Gagal menghapus user.' };
     revalidatePath('/dashboard/users');
     return { success: true };
   } catch {
@@ -101,11 +115,14 @@ export async function createCategory(formData: FormData) {
   const name = (formData.get('name') as string)?.trim();
   if (!name) return { error: 'Nama kategori wajib diisi.' };
   try {
-    await sql`INSERT INTO categories (name) VALUES (${name})`;
+    const { error } = await supabaseAdmin.from('categories').insert({ name });
+    if (error) {
+      if (error.code === '23505') return { error: 'Kategori sudah ada.' };
+      return { error: 'Gagal membuat kategori.' };
+    }
     revalidatePath('/dashboard/master/categories');
     return { success: true };
-  } catch (error: any) {
-    if (error?.code === '23505') return { error: 'Kategori sudah ada.' };
+  } catch {
     return { error: 'Gagal membuat kategori.' };
   }
 }
@@ -114,18 +131,25 @@ export async function updateCategory(id: string, formData: FormData) {
   const name = (formData.get('name') as string)?.trim();
   if (!name) return { error: 'Nama kategori wajib diisi.' };
   try {
-    await sql`UPDATE categories SET name = ${name} WHERE id = ${id}`;
+    const { error } = await supabaseAdmin
+      .from('categories')
+      .update({ name })
+      .eq('id', id);
+    if (error) {
+      if (error.code === '23505') return { error: 'Kategori sudah ada.' };
+      return { error: 'Gagal mengupdate kategori.' };
+    }
     revalidatePath('/dashboard/master/categories');
     return { success: true };
-  } catch (error: any) {
-    if (error?.code === '23505') return { error: 'Kategori sudah ada.' };
+  } catch {
     return { error: 'Gagal mengupdate kategori.' };
   }
 }
 
 export async function deleteCategory(id: string) {
   try {
-    await sql`DELETE FROM categories WHERE id = ${id}`;
+    const { error } = await supabaseAdmin.from('categories').delete().eq('id', id);
+    if (error) return { error: 'Gagal menghapus kategori. Pastikan tidak ada jenis dokumen yang menggunakan kategori ini.' };
     revalidatePath('/dashboard/master/categories');
     return { success: true };
   } catch {
@@ -142,11 +166,16 @@ export async function createDocumentType(formData: FormData) {
   if (!name) return { error: 'Nama jenis dokumen wajib diisi.' };
   if (!category_id) return { error: 'Kategori wajib dipilih.' };
   try {
-    await sql`INSERT INTO document_types (name, category_id) VALUES (${name}, ${category_id})`;
+    const { error } = await supabaseAdmin
+      .from('document_types')
+      .insert({ name, category_id });
+    if (error) {
+      if (error.code === '23505') return { error: 'Jenis dokumen sudah ada di kategori ini.' };
+      return { error: 'Gagal membuat jenis dokumen.' };
+    }
     revalidatePath('/dashboard/master/document-types');
     return { success: true };
-  } catch (error: any) {
-    if (error?.code === '23505') return { error: 'Jenis dokumen sudah ada di kategori ini.' };
+  } catch {
     return { error: 'Gagal membuat jenis dokumen.' };
   }
 }
@@ -157,18 +186,25 @@ export async function updateDocumentType(id: string, formData: FormData) {
   if (!name) return { error: 'Nama jenis dokumen wajib diisi.' };
   if (!category_id) return { error: 'Kategori wajib dipilih.' };
   try {
-    await sql`UPDATE document_types SET name = ${name}, category_id = ${category_id} WHERE id = ${id}`;
+    const { error } = await supabaseAdmin
+      .from('document_types')
+      .update({ name, category_id })
+      .eq('id', id);
+    if (error) {
+      if (error.code === '23505') return { error: 'Jenis dokumen sudah ada di kategori ini.' };
+      return { error: 'Gagal mengupdate jenis dokumen.' };
+    }
     revalidatePath('/dashboard/master/document-types');
     return { success: true };
-  } catch (error: any) {
-    if (error?.code === '23505') return { error: 'Jenis dokumen sudah ada di kategori ini.' };
+  } catch {
     return { error: 'Gagal mengupdate jenis dokumen.' };
   }
 }
 
 export async function deleteDocumentType(id: string) {
   try {
-    await sql`DELETE FROM document_types WHERE id = ${id}`;
+    const { error } = await supabaseAdmin.from('document_types').delete().eq('id', id);
+    if (error) return { error: 'Gagal menghapus jenis dokumen. Pastikan tidak ada dokumen yang menggunakan jenis ini.' };
     revalidatePath('/dashboard/master/document-types');
     return { success: true };
   } catch {
@@ -185,11 +221,14 @@ export async function createDepartment(formData: FormData) {
   if (!code) return { error: 'Kode departemen wajib diisi.' };
   if (!name) return { error: 'Nama departemen wajib diisi.' };
   try {
-    await sql`INSERT INTO departments (code, name) VALUES (${code}, ${name})`;
+    const { error } = await supabaseAdmin.from('departments').insert({ code, name });
+    if (error) {
+      if (error.code === '23505') return { error: 'Kode departemen sudah ada.' };
+      return { error: 'Gagal membuat departemen.' };
+    }
     revalidatePath('/dashboard/master/departments');
     return { success: true };
-  } catch (error: any) {
-    if (error?.code === '23505') return { error: 'Kode departemen sudah ada.' };
+  } catch {
     return { error: 'Gagal membuat departemen.' };
   }
 }
@@ -200,18 +239,25 @@ export async function updateDepartment(id: string, formData: FormData) {
   if (!code) return { error: 'Kode departemen wajib diisi.' };
   if (!name) return { error: 'Nama departemen wajib diisi.' };
   try {
-    await sql`UPDATE departments SET code = ${code}, name = ${name} WHERE id = ${id}`;
+    const { error } = await supabaseAdmin
+      .from('departments')
+      .update({ code, name })
+      .eq('id', id);
+    if (error) {
+      if (error.code === '23505') return { error: 'Kode departemen sudah ada.' };
+      return { error: 'Gagal mengupdate departemen.' };
+    }
     revalidatePath('/dashboard/master/departments');
     return { success: true };
-  } catch (error: any) {
-    if (error?.code === '23505') return { error: 'Kode departemen sudah ada.' };
+  } catch {
     return { error: 'Gagal mengupdate departemen.' };
   }
 }
 
 export async function deleteDepartment(id: string) {
   try {
-    await sql`DELETE FROM departments WHERE id = ${id}`;
+    const { error } = await supabaseAdmin.from('departments').delete().eq('id', id);
+    if (error) return { error: 'Gagal menghapus departemen.' };
     revalidatePath('/dashboard/master/departments');
     return { success: true };
   } catch {
@@ -227,11 +273,11 @@ export async function createDocument(formData: FormData) {
   const title = (formData.get('title') as string)?.trim();
   const category_id = formData.get('category_id') as string;
   const type_id = formData.get('type_id') as string;
-  const department_id = formData.get('department_id') as string || null;
+  const department_id = (formData.get('department_id') as string) || null;
   const revision = parseInt(formData.get('revision') as string) || 1;
   const effective_date = formData.get('effective_date') as string;
-  const revision_date = formData.get('revision_date') as string || null;
-  const expiry_date = formData.get('expiry_date') as string || null;
+  const revision_date = (formData.get('revision_date') as string) || null;
+  const expiry_date = (formData.get('expiry_date') as string) || null;
   const uploaded_by = formData.get('uploaded_by') as string;
 
   if (!doc_number || !title || !category_id || !type_id || !effective_date) {
@@ -239,20 +285,23 @@ export async function createDocument(formData: FormData) {
   }
 
   try {
-    const result = await sql`
-      INSERT INTO documents 
-        (doc_number, title, category_id, type_id, department_id, revision, 
-         effective_date, revision_date, expiry_date, uploaded_by, status)
-      VALUES 
-        (${doc_number}, ${title}, ${category_id}, ${type_id}, ${department_id}, 
-         ${revision}, ${effective_date}, ${revision_date}, ${expiry_date}, 
-         ${uploaded_by}, 'terbaru')
-      RETURNING id
-    `;
+    const { data, error } = await supabaseAdmin
+      .from('documents')
+      .insert({
+        doc_number, title, category_id, type_id, department_id,
+        revision, effective_date, revision_date, expiry_date,
+        uploaded_by, status: 'terbaru',
+      })
+      .select('id')
+      .single();
+
+    if (error) {
+      if (error.code === '23505') return { error: 'Nomor dokumen dengan revisi ini sudah ada.' };
+      return { error: 'Gagal membuat dokumen.' };
+    }
     revalidatePath('/dashboard/documents');
-    return { success: true, id: result[0].id };
-  } catch (error: any) {
-    if (error?.code === '23505') return { error: 'Nomor dokumen dengan revisi ini sudah ada.' };
+    return { success: true, id: data.id };
+  } catch {
     return { error: 'Gagal membuat dokumen.' };
   }
 }
@@ -265,14 +314,13 @@ export async function saveDocumentFile(
   fileType: string
 ) {
   try {
-    await sql`
-      INSERT INTO document_files (document_id, file_label, file_url, file_name, file_type)
-      VALUES (${documentId}, ${fileLabel}, ${fileUrl}, ${fileName}, ${fileType})
-      ON CONFLICT (document_id, file_label) DO UPDATE SET
-        file_url = EXCLUDED.file_url,
-        file_name = EXCLUDED.file_name,
-        file_type = EXCLUDED.file_type
-    `;
+    const { error } = await supabaseAdmin
+      .from('document_files')
+      .upsert(
+        { document_id: documentId, file_label: fileLabel, file_url: fileUrl, file_name: fileName, file_type: fileType },
+        { onConflict: 'document_id,file_label' }
+      );
+    if (error) return { error: 'Gagal menyimpan file.' };
     return { success: true };
   } catch {
     return { error: 'Gagal menyimpan file.' };
@@ -281,7 +329,11 @@ export async function saveDocumentFile(
 
 export async function deleteDocument(id: string) {
   try {
-    await sql`UPDATE documents SET status = 'dihapus', updated_at = NOW() WHERE id = ${id}`;
+    const { error } = await supabaseAdmin
+      .from('documents')
+      .update({ status: 'dihapus', updated_at: new Date().toISOString() })
+      .eq('id', id);
+    if (error) return { error: 'Gagal menghapus dokumen.' };
     revalidatePath('/dashboard/documents');
     return { success: true };
   } catch {
@@ -289,94 +341,100 @@ export async function deleteDocument(id: string) {
   }
 }
 
-// ============================================================
-// UPDATE DOCUMENT — koreksi data saja (no. dokumen & revisi tidak berubah)
-// ============================================================
 export async function updateDocumentOnly(id: string, formData: FormData) {
   const title = (formData.get('title') as string)?.trim();
   const doc_number = (formData.get('doc_number') as string)?.trim();
   const revision = parseInt(formData.get('revision') as string) || 0;
-  const department_id = formData.get('department_id') as string || null;
+  const department_id = (formData.get('department_id') as string) || null;
   const effective_date = formData.get('effective_date') as string;
-  const revision_date = formData.get('revision_date') as string || null;
-  const expiry_date = formData.get('expiry_date') as string || null;
-
+  const revision_date = (formData.get('revision_date') as string) || null;
+  const expiry_date = (formData.get('expiry_date') as string) || null;
 
   try {
-    await sql`
-      UPDATE documents SET
-        title = ${title}, doc_number = ${doc_number}, revision = ${revision},
-        department_id = ${department_id}, effective_date = ${effective_date},
-        revision_date = ${revision_date}, expiry_date = ${expiry_date}, updated_at = NOW()
-      WHERE id = ${id}
-    `;
+    const { error } = await supabaseAdmin
+      .from('documents')
+      .update({
+        title, doc_number, revision, department_id,
+        effective_date, revision_date, expiry_date,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id);
+    if (error) {
+      if (error.code === '23505') return { error: 'Nomor dokumen dengan revisi ini sudah ada.' };
+      return { error: 'Gagal mengupdate dokumen.' };
+    }
     revalidatePath('/dashboard/documents');
     return { success: true };
-  } catch (error: any) {
-    if (error?.code === '23505') return { error: 'Nomor dokumen dengan revisi ini sudah ada.' };
+  } catch {
     return { error: 'Gagal mengupdate dokumen.' };
   }
 }
 
-// ============================================================
-// CREATE DOCUMENT REVISION — buat revisi baru, tandai lama sebagai kadaluarsa
-// ============================================================
 export async function createDocumentRevision(oldId: string, formData: FormData) {
   const title = (formData.get('title') as string)?.trim();
   const doc_number = (formData.get('doc_number') as string)?.trim();
   const category_id = formData.get('category_id') as string;
   const type_id = formData.get('type_id') as string;
   const revision = parseInt(formData.get('revision') as string) || 0;
-  const department_id = formData.get('department_id') as string || null;
+  const department_id = (formData.get('department_id') as string) || null;
   const effective_date = formData.get('effective_date') as string;
-  const revision_date = formData.get('revision_date') as string || null;
-  const expiry_date = formData.get('expiry_date') as string || null;
+  const revision_date = (formData.get('revision_date') as string) || null;
+  const expiry_date = (formData.get('expiry_date') as string) || null;
   const uploaded_by = formData.get('uploaded_by') as string;
 
-
   try {
-    // Tandai semua revisi lama doc_number ini sebagai kadaluarsa
-    await sql`
-      UPDATE documents SET status = 'kadaluarsa', updated_at = NOW()
-      WHERE doc_number = ${doc_number} AND status = 'terbaru'
-    `;
+    // Tandai semua revisi lama sebagai kadaluarsa
+    const { error: expireError } = await supabaseAdmin
+      .from('documents')
+      .update({ status: 'kadaluarsa', updated_at: new Date().toISOString() })
+      .eq('doc_number', doc_number)
+      .eq('status', 'terbaru');
+    if (expireError) return { error: 'Gagal membuat revisi dokumen.' };
 
     // Insert revisi baru
-    const result = await sql`
-      INSERT INTO documents
-        (doc_number, title, category_id, type_id, department_id, revision,
-         effective_date, revision_date, expiry_date, uploaded_by, status)
-      VALUES
-        (${doc_number}, ${title}, ${category_id}, ${type_id}, ${department_id},
-         ${revision}, ${effective_date}, ${revision_date}, ${expiry_date},
-         ${uploaded_by}, 'terbaru')
-      RETURNING id
-    `;
+    const { data, error } = await supabaseAdmin
+      .from('documents')
+      .insert({
+        doc_number, title, category_id, type_id, department_id,
+        revision, effective_date, revision_date, expiry_date,
+        uploaded_by, status: 'terbaru',
+      })
+      .select('id')
+      .single();
 
+    if (error) {
+      if (error.code === '23505') return { error: 'Nomor dokumen dengan revisi ini sudah ada.' };
+      return { error: 'Gagal membuat revisi dokumen.' };
+    }
     revalidatePath('/dashboard/documents');
-    return { success: true, id: result[0].id };
-  } catch (error: any) {
-    if (error?.code === '23505') return { error: 'Nomor dokumen dengan revisi ini sudah ada.' };
+    return { success: true, id: data.id };
+  } catch {
     return { error: 'Gagal membuat revisi dokumen.' };
   }
 }
 
-// ============================================================
-// RESTORE DOCUMENT — pulihkan dari recycle bin
-// ============================================================
 export async function restoreDocument(id: string) {
   try {
-    // Cek apakah doc_number ini sudah punya revisi terbaru
-    const doc = await sql`SELECT doc_number FROM documents WHERE id = ${id}`;
+    const { data: doc, error: fetchError } = await supabaseAdmin
+      .from('documents')
+      .select('doc_number')
+      .eq('id', id)
+      .single();
+    if (fetchError || !doc) return { error: 'Gagal memulihkan dokumen.' };
 
-    const hasLatest = await sql`
-      SELECT id FROM documents
-      WHERE doc_number = ${doc[0].doc_number} AND status = 'terbaru'
-    `;
+    const { data: existing } = await supabaseAdmin
+      .from('documents')
+      .select('id')
+      .eq('doc_number', doc.doc_number)
+      .eq('status', 'terbaru');
 
-    // Pulihkan: jika belum ada yg terbaru, jadikan ini terbaru; jika sudah ada, jadikan kadaluarsa
-    const newStatus = hasLatest.length === 0 ? 'terbaru' : 'kadaluarsa';
-    await sql`UPDATE documents SET status = ${newStatus}, updated_at = NOW() WHERE id = ${id}`;
+    const newStatus = !existing || existing.length === 0 ? 'terbaru' : 'kadaluarsa';
+    const { error } = await supabaseAdmin
+      .from('documents')
+      .update({ status: newStatus, updated_at: new Date().toISOString() })
+      .eq('id', id);
+
+    if (error) return { error: 'Gagal memulihkan dokumen.' };
     revalidatePath('/dashboard/documents');
     revalidatePath('/dashboard/documents/trash');
     return { success: true };
@@ -385,11 +443,13 @@ export async function restoreDocument(id: string) {
   }
 }
 
-
-
 export async function deleteDocumentFile(fileId: string) {
   try {
-    await sql`DELETE FROM document_files WHERE id = ${fileId}`;
+    const { error } = await supabaseAdmin
+      .from('document_files')
+      .delete()
+      .eq('id', fileId);
+    if (error) return { error: 'Gagal menghapus file.' };
     return { success: true };
   } catch {
     return { error: 'Gagal menghapus file.' };

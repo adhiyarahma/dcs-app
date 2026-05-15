@@ -3,14 +3,19 @@ import Credentials from 'next-auth/providers/credentials';
 import { authConfig } from './auth.config';
 import { z } from 'zod';
 import bcrypt from 'bcrypt';
-import postgres from 'postgres';
+import type { User } from '@/app/lib/definitions';
+import { supabaseAdmin } from '@/app/lib/supabase';
 
-const sql = postgres(process.env.POSTGRES_URL!, { ssl: 'require' });
-
-async function getUser(email: string) {
+async function getUser(email: string): Promise<User | undefined> {
   try {
-    const user = await sql`SELECT * FROM users WHERE email = ${email}`;
-    return user[0];
+    const { data, error } = await supabaseAdmin
+      .from('users')
+      .select('*')
+      .eq('email', email)
+      .single();
+
+    if (error || !data) return undefined;
+    return data as User;
   } catch (error) {
     console.error('Failed to fetch user:', error);
     throw new Error('Failed to fetch user.');
@@ -30,8 +35,8 @@ export const { auth, signIn, signOut, handlers } = NextAuth({
           const { email, password } = parsed.data;
           const user = await getUser(email);
           if (!user) return null;
-          const match = await bcrypt.compare(password, user.password as string);
-          if (match) return user as any;
+          const match = await bcrypt.compare(password, user.password);
+          if (match) return user;
         }
         return null;
       },
