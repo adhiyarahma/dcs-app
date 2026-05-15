@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import { updateDocumentOnly, createDocumentRevision, saveDocumentFile, deleteDocumentFile } from '@/app/lib/actions';
 import { CloudArrowUpIcon, XMarkIcon, DocumentIcon, TrashIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline';
 import { Toast } from '@/app/ui/toast';
-import { Toast } from '@/app/ui/toast';
 import clsx from 'clsx';
 
 type Department = { id: string; code: string; name: string };
@@ -65,7 +64,6 @@ export default function DocumentEditForm({
   const [showRevisionModal, setShowRevisionModal] = useState(false);
   const [pendingFormData, setPendingFormData] = useState<FormData | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
-  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   const category = categories.find(c => c.id === document.category_id);
   const docType = documentTypes.find(t => t.id === document.type_id);
@@ -97,7 +95,7 @@ export default function DocumentEditForm({
     const ext = file.name.split('.').pop();
     const categorySlug = slugify(category?.name ?? 'uncategorized');
     const typeSlug = slugify(docType?.name ?? 'unknown');
-    const safeDocNumber = docNumber.replace(///g, '-').replace(/s+/g, '_');
+    const safeDocNumber = docNumber.replace(/\//g, '-').replace(/\s+/g, '_');
     const revStr = String(revision ?? 0).padStart(2, '0');
     const path = `${categorySlug}/${typeSlug}/${safeDocNumber}/rev-${revStr}/${label}-${Date.now()}.${ext}`;
 

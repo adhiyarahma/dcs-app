@@ -150,7 +150,7 @@ export default function DocumentForm({
     const ext = file.name.split('.').pop();
     const categorySlug = slugify(categoryName);
     const typeSlug = slugify(typeName);
-    const safeDocNumber = docNumber.replace(///g, '-').replace(/s+/g, '_');
+    const safeDocNumber = docNumber.replace(/\//g, '-').replace(/\s+/g, '_');
     const revStr = String(revision ?? 0).padStart(2, '0');
     // Struktur: category/type/doc_number/rev-XX/label-timestamp.ext
     const path = `${categorySlug}/${typeSlug}/${safeDocNumber}/rev-${revStr}/${label}-${Date.now()}.${ext}`;
@@ -212,7 +212,8 @@ export default function DocumentForm({
   }
 
   return (
-    {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+    <>
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
       <form onSubmit={handleSubmit} className="space-y-6">
       {error && (
         <div className="p-4 bg-red-50 border border-red-200 text-red-600 rounded-xl text-sm">{error}</div>
@@ -340,5 +341,6 @@ export default function DocumentForm({
         </button>
       </div>
     </form>
+    </>
   );
 }

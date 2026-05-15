@@ -1,12 +1,22 @@
 import { NextResponse } from 'next/server';
-import postgres from 'postgres';
-
-const sql = postgres(process.env.POSTGRES_URL!, { ssl: 'require' });
+import { supabaseAdmin } from '@/app/lib/supabase';
 
 export async function GET() {
   try {
-    const categories = await sql`SELECT id, name FROM categories ORDER BY name ASC`;
-    const documentTypes = await sql`SELECT id, name, category_id FROM document_types ORDER BY name ASC`;
+    const { data: categories, error: catError } = await supabaseAdmin
+      .from('categories')
+      .select('id, name')
+      .order('name');
+
+    const { data: documentTypes, error: typeError } = await supabaseAdmin
+      .from('document_types')
+      .select('id, name, category_id')
+      .order('name');
+
+    if (catError || typeError) {
+      return NextResponse.json({ error: 'Gagal mengambil data master.' }, { status: 500 });
+    }
+
     return NextResponse.json({ categories, documentTypes });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });

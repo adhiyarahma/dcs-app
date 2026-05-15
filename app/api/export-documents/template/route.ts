@@ -1,8 +1,6 @@
 import { NextResponse, NextRequest } from 'next/server';
 import * as XLSX from 'xlsx';
-import postgres from 'postgres';
-
-const sql = postgres(process.env.POSTGRES_URL!, { ssl: 'require' });
+import { supabaseAdmin } from '@/app/lib/supabase';
 
 export async function GET(req: NextRequest) {
   try {
@@ -14,14 +12,24 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Pilih kategori dan jenis dokumen terlebih dahulu.' }, { status: 400 });
     }
 
-    const cats = await sql`SELECT name FROM categories WHERE id = ${category_id} LIMIT 1`;
-    const types = await sql`SELECT name FROM document_types WHERE id = ${type_id} LIMIT 1`;
-    if (!cats[0] || !types[0]) {
+    const { data: cat } = await supabaseAdmin
+      .from('categories')
+      .select('name')
+      .eq('id', category_id)
+      .single();
+
+    const { data: type } = await supabaseAdmin
+      .from('document_types')
+      .select('name')
+      .eq('id', type_id)
+      .single();
+
+    if (!cat || !type) {
       return NextResponse.json({ error: 'Kategori atau jenis tidak valid.' }, { status: 400 });
     }
 
-    const categoryName = cats[0].name.toLowerCase();
-    const typeName = types[0].name.toLowerCase();
+    const categoryName = cat.name.toLowerCase();
+    const typeName = type.name.toLowerCase();
     const isMSDS = categoryName.includes('msds');
     const showRevisionDate = isMSDS && typeName.includes('kimia');
     const showExpiryDate = isMSDS;
@@ -43,14 +51,21 @@ export async function GET(req: NextRequest) {
     XLSX.utils.book_append_sheet(wb, wsTemplate, 'Template');
 
     if (showDepartment) {
-      const deps = await sql`SELECT code AS "Kode Bagian", name AS "Nama Bagian" FROM departments ORDER BY code`;
-      const wsDeps = XLSX.utils.json_to_sheet(deps);
+      const { data: deps } = await supabaseAdmin
+        .from('departments')
+        .select('code, name')
+        .order('code');
+      const depsFormatted = (deps ?? []).map((d: { code: string; name: string }) => ({
+        'Kode Bagian': d.code,
+        'Nama Bagian': d.name,
+      }));
+      const wsDeps = XLSX.utils.json_to_sheet(depsFormatted);
       wsDeps['!cols'] = [{ wch: 15 }, { wch: 30 }];
       XLSX.utils.book_append_sheet(wb, wsDeps, 'Ref - Bagian');
     }
 
     const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
-    const filename = `template-${cats[0].name}-${types[0].name}.xlsx`.replace(/\s+/g, '-').toLowerCase();
+    const filename = `template-${cat.name}-${type.name}.xlsx`.replace(/\s+/g, '-').toLowerCase();
 
     return new NextResponse(buf, {
       headers: {

@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import * as XLSX from 'xlsx';
-import postgres from 'postgres';
-
-const sql = postgres(process.env.POSTGRES_URL!, { ssl: 'require' });
+import { supabaseAdmin } from '@/app/lib/supabase';
 
 export async function POST(req: NextRequest) {
   try {
@@ -18,14 +16,24 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Kategori dan jenis dokumen wajib dipilih.' }, { status: 400 });
     }
 
-    const cats = await sql`SELECT id, name FROM categories WHERE id = ${category_id} LIMIT 1`;
-    const types = await sql`SELECT id, name FROM document_types WHERE id = ${type_id} LIMIT 1`;
-    if (!cats[0] || !types[0]) {
+    const { data: cat } = await supabaseAdmin
+      .from('categories')
+      .select('id, name')
+      .eq('id', category_id)
+      .single();
+
+    const { data: type } = await supabaseAdmin
+      .from('document_types')
+      .select('id, name')
+      .eq('id', type_id)
+      .single();
+
+    if (!cat || !type) {
       return NextResponse.json({ error: 'Kategori atau jenis dokumen tidak valid.' }, { status: 400 });
     }
 
-    const categoryName = cats[0].name.toLowerCase();
-    const typeName = types[0].name.toLowerCase();
+    const categoryName = cat.name.toLowerCase();
+    const typeName = type.name.toLowerCase();
     const isMSDS = categoryName.includes('msds');
     const showRevisionDate = isMSDS && typeName.includes('kimia');
     const showExpiryDate = isMSDS;
@@ -38,11 +46,25 @@ export async function POST(req: NextRequest) {
     if (rows.length === 0) return NextResponse.json({ error: 'File Excel kosong.' }, { status: 400 });
 
     // Ambil semua departemen sekali (hindari N+1 query)
-    const allDeps = await sql`SELECT id, LOWER(code) AS code FROM departments`;
-    const deptMap: Record<string, string> = Object.fromEntries(allDeps.map(d => [d.code, d.id]));
+    const { data: allDeps } = await supabaseAdmin
+      .from('departments')
+      .select('id, code');
+    const deptMap: Record<string, string> = Object.fromEntries(
+      (allDeps ?? []).map((d: { code: string; id: string }) => [d.code.toLowerCase(), d.id])
+    );
 
     let success = 0;
     const errors: string[] = [];
+
+    const formatDate = (val: any): string | null => {
+      if (!val) return null;
+      if (val instanceof Date) return val.toISOString().slice(0, 10);
+      const str = String(val).trim();
+      if (!str) return null;
+      const parts = str.split('/');
+      if (parts.length === 3) return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+      return str.slice(0, 10);
+    };
 
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
@@ -70,42 +92,45 @@ export async function POST(req: NextRequest) {
           }
         }
 
-        const formatDate = (val: any) => {
-          if (!val) return null;
-          if (val instanceof Date) return val.toISOString().slice(0, 10);
-          const str = String(val).trim();
-          if (!str) return null;
-          const parts = str.split('/');
-          if (parts.length === 3) return `${parts[2]}-${parts[1].padStart(2,'0')}-${parts[0].padStart(2,'0')}`;
-          return str.slice(0, 10);
-        };
-
         const effective_date = formatDate(effective_date_raw);
         const revision_date = formatDate(revision_date_raw);
         const expiry_date = formatDate(expiry_date_raw);
 
-        if (!effective_date) { errors.push(`Baris ${rowNum}: Format Tgl Efektif tidak valid.`); continue; }
+        if (!effective_date) {
+          errors.push(`Baris ${rowNum}: Format Tgl Efektif tidak valid.`);
+          continue;
+        }
 
-        const existing = await sql`SELECT id FROM documents WHERE doc_number = ${doc_number} LIMIT 1`;
-        if (existing[0]) {
-          await sql`
-            UPDATE documents SET
-              title = ${title}, type_id = ${type_id}, department_id = ${department_id},
-              revision = ${revision}, effective_date = ${effective_date},
-              revision_date = ${revision_date}, expiry_date = ${expiry_date}, updated_at = NOW()
-            WHERE doc_number = ${doc_number}
-          `;
+        const { data: existing } = await supabaseAdmin
+          .from('documents')
+          .select('id')
+          .eq('doc_number', doc_number)
+          .single();
+
+        if (existing) {
+          await supabaseAdmin
+            .from('documents')
+            .update({
+              title, type_id, department_id, revision,
+              effective_date, revision_date, expiry_date,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('doc_number', doc_number);
         } else {
-          await sql`
-            INSERT INTO documents (doc_number, title, category_id, type_id, department_id, revision, effective_date, revision_date, expiry_date, uploaded_by, status)
-            VALUES (${doc_number}, ${title}, ${category_id}, ${type_id}, ${department_id}, ${revision}, ${effective_date}, ${revision_date}, ${expiry_date}, ${uploaded_by}, 'terbaru')
-          `;
+          await supabaseAdmin
+            .from('documents')
+            .insert({
+              doc_number, title, category_id, type_id, department_id,
+              revision, effective_date, revision_date, expiry_date,
+              uploaded_by, status: 'terbaru',
+            });
         }
         success++;
       } catch (err: any) {
         errors.push(`Baris ${rowNum}: ${err.message}`);
       }
     }
+
     return NextResponse.json({ success, errors, total: rows.length });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
