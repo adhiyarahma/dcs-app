@@ -1,7 +1,0 @@
-{
-  "version": 3,
-  "sources": [],
-  "sections": [
-    {"offset": {"line": 6, "column": 0}, "map": {"version":3,"sources":[],"names":[],"mappings":"","debugId":null}},
-    {"offset": {"line": 116, "column": 0}, "map": {"version":3,"sources":["file:///workspaces/dcs-app/app/api/master-data/route.ts"],"sourcesContent":["import { NextResponse } from 'next/server';\nimport postgres from 'postgres';\n\nconst sql = postgres(process.env.POSTGRES_URL!, { ssl: 'require' });\n\nexport async function GET() {\n  try {\n    const categories = await sql`SELECT id, name FROM categories ORDER BY name ASC`;\n    const documentTypes = await sql`SELECT id, name, category_id FROM document_types ORDER BY name ASC`;\n    return NextResponse.json({ categories, documentTypes });\n  } catch (err: any) {\n    return NextResponse.json({ error: err.message }, { status: 500 });\n  }\n}\n"],"names":[],"mappings":";;;AAAA;AACA;;;AAEA,MAAM,MAAM,CAAA,GAAA,0IAAA,CAAA,UAAQ,AAAD,EAAE,QAAQ,GAAG,CAAC,YAAY,EAAG;IAAE,KAAK;AAAU;AAE1D,eAAe;IACpB,IAAI;QACF,MAAM,aAAa,MAAM,GAAG,CAAC,iDAAiD,CAAC;QAC/E,MAAM,gBAAgB,MAAM,GAAG,CAAC,kEAAkE,CAAC;QACnG,OAAO,gIAAA,CAAA,eAAY,CAAC,IAAI,CAAC;YAAE;YAAY;QAAc;IACvD,EAAE,OAAO,KAAU;QACjB,OAAO,gIAAA,CAAA,eAAY,CAAC,IAAI,CAAC;YAAE,OAAO,IAAI,OAAO;QAAC,GAAG;YAAE,QAAQ;QAAI;IACjE;AACF","debugId":null}}]
-}
