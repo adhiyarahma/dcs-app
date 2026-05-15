@@ -8,6 +8,7 @@ import {
   ArrowDownTrayIcon, ArrowUpTrayIcon, DocumentIcon, ExclamationTriangleIcon,
 } from '@heroicons/react/24/outline';
 import { deleteDocument } from '@/app/lib/actions';
+import { getDocumentHistory } from '@/app/lib/data';
 
 type Document = {
   id: string;

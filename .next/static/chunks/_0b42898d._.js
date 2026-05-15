@@ -39,6 +39,7 @@ function ImportClient({ userId }) {
     const [result, setResult] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])(null);
     const [zipResult, setZipResult] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])(null);
     const [importDone, setImportDone] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])(false);
+    const [allowZipDirect, setAllowZipDirect] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])(false);
     (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useEffect"])({
         "ImportClient.useEffect": ()=>{
             fetch('/api/master-data').then({
@@ -54,7 +55,7 @@ function ImportClient({ userId }) {
     const filteredTypes = docTypes.filter((t)=>t.category_id === selectedCategory);
     const step2Active = !!(selectedCategory && selectedType);
     const step3Active = !!(selectedCategory && selectedType && file);
-    const step4Active = importDone;
+    const step4Active = importDone || allowZipDirect;
     const templateUrl = step2Active ? `/api/export-documents/template?category_id=${selectedCategory}&type_id=${selectedType}` : null;
     const selectedCategoryName = categories.find((c)=>c.id === selectedCategory)?.name ?? '';
     const selectedTypeName = filteredTypes.find((t)=>t.id === selectedType)?.name ?? '';
@@ -124,7 +125,7 @@ function ImportClient({ userId }) {
                         children: "Import Dokumen"
                     }, void 0, false, {
                         fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                        lineNumber: 86,
+                        lineNumber: 87,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -132,13 +133,13 @@ function ImportClient({ userId }) {
                         children: "Import data dan file dokumen massal dari Excel + ZIP."
                     }, void 0, false, {
                         fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                        lineNumber: 87,
+                        lineNumber: 88,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                lineNumber: 85,
+                lineNumber: 86,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -152,7 +153,7 @@ function ImportClient({ userId }) {
                                 children: step2Active ? '✓' : '1'
                             }, void 0, false, {
                                 fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                                lineNumber: 93,
+                                lineNumber: 94,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("h2", {
@@ -160,13 +161,13 @@ function ImportClient({ userId }) {
                                 children: "Pilih Kategori & Jenis Dokumen"
                             }, void 0, false, {
                                 fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                                lineNumber: 96,
+                                lineNumber: 97,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                        lineNumber: 92,
+                        lineNumber: 93,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -183,13 +184,13 @@ function ImportClient({ userId }) {
                                                 children: "*"
                                             }, void 0, false, {
                                                 fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                                                lineNumber: 100,
+                                                lineNumber: 101,
                                                 columnNumber: 115
                                             }, this)
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                                        lineNumber: 100,
+                                        lineNumber: 101,
                                         columnNumber: 13
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("select", {
@@ -208,7 +209,7 @@ function ImportClient({ userId }) {
                                                 children: "Pilih kategori..."
                                             }, void 0, false, {
                                                 fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                                                lineNumber: 104,
+                                                lineNumber: 105,
                                                 columnNumber: 15
                                             }, this),
                                             categories.map((c)=>/*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("option", {
@@ -216,19 +217,19 @@ function ImportClient({ userId }) {
                                                     children: c.name
                                                 }, c.id, false, {
                                                     fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                                                    lineNumber: 105,
+                                                    lineNumber: 106,
                                                     columnNumber: 36
                                                 }, this))
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                                        lineNumber: 101,
+                                        lineNumber: 102,
                                         columnNumber: 13
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                                lineNumber: 99,
+                                lineNumber: 100,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -242,13 +243,13 @@ function ImportClient({ userId }) {
                                                 children: "*"
                                             }, void 0, false, {
                                                 fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                                                lineNumber: 109,
+                                                lineNumber: 110,
                                                 columnNumber: 120
                                             }, this)
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                                        lineNumber: 109,
+                                        lineNumber: 110,
                                         columnNumber: 13
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("select", {
@@ -267,7 +268,7 @@ function ImportClient({ userId }) {
                                                 children: "Pilih jenis..."
                                             }, void 0, false, {
                                                 fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                                                lineNumber: 114,
+                                                lineNumber: 115,
                                                 columnNumber: 15
                                             }, this),
                                             filteredTypes.map((t)=>/*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("option", {
@@ -275,25 +276,25 @@ function ImportClient({ userId }) {
                                                     children: t.name
                                                 }, t.id, false, {
                                                     fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                                                    lineNumber: 115,
+                                                    lineNumber: 116,
                                                     columnNumber: 39
                                                 }, this))
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                                        lineNumber: 110,
+                                        lineNumber: 111,
                                         columnNumber: 13
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                                lineNumber: 108,
+                                lineNumber: 109,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                        lineNumber: 98,
+                        lineNumber: 99,
                         columnNumber: 9
                     }, this),
                     step2Active && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -303,7 +304,7 @@ function ImportClient({ userId }) {
                                 className: "w-4 h-4 text-blue-500 shrink-0"
                             }, void 0, false, {
                                 fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                                lineNumber: 121,
+                                lineNumber: 122,
                                 columnNumber: 13
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -315,7 +316,7 @@ function ImportClient({ userId }) {
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                                lineNumber: 122,
+                                lineNumber: 123,
                                 columnNumber: 13
                             }, this),
                             templateUrl && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("a", {
@@ -326,26 +327,26 @@ function ImportClient({ userId }) {
                                         className: "w-3.5 h-3.5"
                                     }, void 0, false, {
                                         fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                                        lineNumber: 125,
+                                        lineNumber: 126,
                                         columnNumber: 17
                                     }, this),
                                     "Download Template"
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                                lineNumber: 124,
+                                lineNumber: 125,
                                 columnNumber: 15
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                        lineNumber: 120,
+                        lineNumber: 121,
                         columnNumber: 11
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                lineNumber: 91,
+                lineNumber: 92,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -359,7 +360,7 @@ function ImportClient({ userId }) {
                                 children: file ? '✓' : '2'
                             }, void 0, false, {
                                 fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                                lineNumber: 136,
+                                lineNumber: 137,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("h2", {
@@ -367,13 +368,13 @@ function ImportClient({ userId }) {
                                 children: "Upload File Excel"
                             }, void 0, false, {
                                 fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                                lineNumber: 139,
+                                lineNumber: 140,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                        lineNumber: 135,
+                        lineNumber: 136,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("label", {
@@ -383,7 +384,7 @@ function ImportClient({ userId }) {
                                 className: "w-8 h-8 text-slate-300"
                             }, void 0, false, {
                                 fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                                lineNumber: 142,
+                                lineNumber: 143,
                                 columnNumber: 11
                             }, this),
                             file ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -391,7 +392,7 @@ function ImportClient({ userId }) {
                                 children: file.name
                             }, void 0, false, {
                                 fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                                lineNumber: 143,
+                                lineNumber: 144,
                                 columnNumber: 19
                             }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
                                 className: "text-sm text-slate-400",
@@ -402,13 +403,13 @@ function ImportClient({ userId }) {
                                         children: ".xlsx"
                                     }, void 0, false, {
                                         fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                                        lineNumber: 144,
+                                        lineNumber: 145,
                                         columnNumber: 78
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                                lineNumber: 144,
+                                lineNumber: 145,
                                 columnNumber: 15
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("input", {
@@ -423,13 +424,13 @@ function ImportClient({ userId }) {
                                 }
                             }, void 0, false, {
                                 fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                                lineNumber: 145,
+                                lineNumber: 146,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                        lineNumber: 141,
+                        lineNumber: 142,
                         columnNumber: 9
                     }, this),
                     file && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -443,13 +444,13 @@ function ImportClient({ userId }) {
                         children: "× Hapus file"
                     }, void 0, false, {
                         fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                        lineNumber: 148,
+                        lineNumber: 149,
                         columnNumber: 18
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                lineNumber: 134,
+                lineNumber: 135,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -463,7 +464,7 @@ function ImportClient({ userId }) {
                                 children: importDone ? '✓' : '3'
                             }, void 0, false, {
                                 fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                                lineNumber: 155,
+                                lineNumber: 156,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("h2", {
@@ -471,13 +472,13 @@ function ImportClient({ userId }) {
                                 children: "Import Data Excel"
                             }, void 0, false, {
                                 fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                                lineNumber: 158,
+                                lineNumber: 159,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                        lineNumber: 154,
+                        lineNumber: 155,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -489,14 +490,14 @@ function ImportClient({ userId }) {
                                 className: "w-4 h-4"
                             }, void 0, false, {
                                 fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                                lineNumber: 162,
+                                lineNumber: 163,
                                 columnNumber: 11
                             }, this),
                             loading ? 'Mengimport...' : 'Import Sekarang'
                         ]
                     }, void 0, true, {
                         fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                        lineNumber: 160,
+                        lineNumber: 161,
                         columnNumber: 9
                     }, this),
                     result && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -509,7 +510,7 @@ function ImportClient({ userId }) {
                                         className: "w-5 h-5 text-emerald-500 shrink-0"
                                     }, void 0, false, {
                                         fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                                        lineNumber: 168,
+                                        lineNumber: 169,
                                         columnNumber: 15
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -520,7 +521,7 @@ function ImportClient({ userId }) {
                                                 children: result.success
                                             }, void 0, false, {
                                                 fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                                                lineNumber: 170,
+                                                lineNumber: 171,
                                                 columnNumber: 17
                                             }, this),
                                             " dari ",
@@ -529,13 +530,13 @@ function ImportClient({ userId }) {
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                                        lineNumber: 169,
+                                        lineNumber: 170,
                                         columnNumber: 15
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                                lineNumber: 167,
+                                lineNumber: 168,
                                 columnNumber: 13
                             }, this),
                             result.errors.length > 0 && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -548,7 +549,7 @@ function ImportClient({ userId }) {
                                                 className: "w-4 h-4"
                                             }, void 0, false, {
                                                 fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                                                lineNumber: 176,
+                                                lineNumber: 177,
                                                 columnNumber: 19
                                             }, this),
                                             " ",
@@ -557,7 +558,7 @@ function ImportClient({ userId }) {
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                                        lineNumber: 175,
+                                        lineNumber: 176,
                                         columnNumber: 17
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("ul", {
@@ -567,30 +568,30 @@ function ImportClient({ userId }) {
                                                 children: e
                                             }, i, false, {
                                                 fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                                                lineNumber: 179,
+                                                lineNumber: 180,
                                                 columnNumber: 48
                                             }, this))
                                     }, void 0, false, {
                                         fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                                        lineNumber: 178,
+                                        lineNumber: 179,
                                         columnNumber: 17
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                                lineNumber: 174,
+                                lineNumber: 175,
                                 columnNumber: 15
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                        lineNumber: 166,
+                        lineNumber: 167,
                         columnNumber: 11
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                lineNumber: 153,
+                lineNumber: 154,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -604,7 +605,7 @@ function ImportClient({ userId }) {
                                 children: zipResult && zipResult.success > 0 ? '✓' : '4'
                             }, void 0, false, {
                                 fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                                lineNumber: 190,
+                                lineNumber: 191,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("h2", {
@@ -616,19 +617,19 @@ function ImportClient({ userId }) {
                                         children: "— opsional"
                                     }, void 0, false, {
                                         fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                                        lineNumber: 193,
+                                        lineNumber: 194,
                                         columnNumber: 110
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                                lineNumber: 193,
+                                lineNumber: 194,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                        lineNumber: 189,
+                        lineNumber: 190,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -639,7 +640,7 @@ function ImportClient({ userId }) {
                                 children: "Konvensi penamaan file di dalam ZIP:"
                             }, void 0, false, {
                                 fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                                lineNumber: 197,
+                                lineNumber: 198,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -647,7 +648,7 @@ function ImportClient({ userId }) {
                                 children: '{doc_number}_{label}.{ext}'
                             }, void 0, false, {
                                 fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                                lineNumber: 198,
+                                lineNumber: 199,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -659,19 +660,19 @@ function ImportClient({ userId }) {
                                         children: "DOC-001_pdf.pdf   DOC-001_word.docx   DOC-002_indonesia.pdf"
                                     }, void 0, false, {
                                         fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                                        lineNumber: 199,
+                                        lineNumber: 200,
                                         columnNumber: 57
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                                lineNumber: 199,
+                                lineNumber: 200,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                        lineNumber: 196,
+                        lineNumber: 197,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("label", {
@@ -681,7 +682,7 @@ function ImportClient({ userId }) {
                                 className: "w-8 h-8 text-slate-300"
                             }, void 0, false, {
                                 fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                                lineNumber: 203,
+                                lineNumber: 204,
                                 columnNumber: 11
                             }, this),
                             zipFile ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -689,7 +690,7 @@ function ImportClient({ userId }) {
                                 children: zipFile.name
                             }, void 0, false, {
                                 fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                                lineNumber: 204,
+                                lineNumber: 205,
                                 columnNumber: 22
                             }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
                                 className: "text-sm text-slate-400",
@@ -700,13 +701,13 @@ function ImportClient({ userId }) {
                                         children: ".zip"
                                     }, void 0, false, {
                                         fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                                        lineNumber: 205,
+                                        lineNumber: 206,
                                         columnNumber: 78
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                                lineNumber: 205,
+                                lineNumber: 206,
                                 columnNumber: 15
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("input", {
@@ -720,13 +721,13 @@ function ImportClient({ userId }) {
                                 }
                             }, void 0, false, {
                                 fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                                lineNumber: 206,
+                                lineNumber: 207,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                        lineNumber: 202,
+                        lineNumber: 203,
                         columnNumber: 9
                     }, this),
                     zipFile && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -739,7 +740,7 @@ function ImportClient({ userId }) {
                         children: "× Hapus file"
                     }, void 0, false, {
                         fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                        lineNumber: 209,
+                        lineNumber: 210,
                         columnNumber: 21
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -751,14 +752,14 @@ function ImportClient({ userId }) {
                                 className: "w-4 h-4"
                             }, void 0, false, {
                                 fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                                lineNumber: 214,
+                                lineNumber: 215,
                                 columnNumber: 11
                             }, this),
                             zipLoading ? 'Mengupload...' : 'Upload ZIP'
                         ]
                     }, void 0, true, {
                         fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                        lineNumber: 212,
+                        lineNumber: 213,
                         columnNumber: 9
                     }, this),
                     zipResult && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -771,7 +772,7 @@ function ImportClient({ userId }) {
                                         className: "w-5 h-5 text-emerald-500 shrink-0"
                                     }, void 0, false, {
                                         fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                                        lineNumber: 221,
+                                        lineNumber: 222,
                                         columnNumber: 15
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -782,7 +783,7 @@ function ImportClient({ userId }) {
                                                 children: zipResult.success
                                             }, void 0, false, {
                                                 fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                                                lineNumber: 223,
+                                                lineNumber: 224,
                                                 columnNumber: 17
                                             }, this),
                                             " dari ",
@@ -791,13 +792,13 @@ function ImportClient({ userId }) {
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                                        lineNumber: 222,
+                                        lineNumber: 223,
                                         columnNumber: 15
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                                lineNumber: 220,
+                                lineNumber: 221,
                                 columnNumber: 13
                             }, this),
                             zipResult.errors.length > 0 && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -810,7 +811,7 @@ function ImportClient({ userId }) {
                                                 className: "w-4 h-4"
                                             }, void 0, false, {
                                                 fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                                                lineNumber: 229,
+                                                lineNumber: 230,
                                                 columnNumber: 19
                                             }, this),
                                             " ",
@@ -819,7 +820,7 @@ function ImportClient({ userId }) {
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                                        lineNumber: 228,
+                                        lineNumber: 229,
                                         columnNumber: 17
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("ul", {
@@ -829,18 +830,18 @@ function ImportClient({ userId }) {
                                                 children: e
                                             }, i, false, {
                                                 fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                                                lineNumber: 232,
+                                                lineNumber: 233,
                                                 columnNumber: 51
                                             }, this))
                                     }, void 0, false, {
                                         fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                                        lineNumber: 231,
+                                        lineNumber: 232,
                                         columnNumber: 17
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                                lineNumber: 227,
+                                lineNumber: 228,
                                 columnNumber: 15
                             }, this),
                             zipResult.success > 0 && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -849,19 +850,19 @@ function ImportClient({ userId }) {
                                 children: "Lihat Dokumen →"
                             }, void 0, false, {
                                 fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                                lineNumber: 237,
+                                lineNumber: 238,
                                 columnNumber: 15
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                        lineNumber: 219,
+                        lineNumber: 220,
                         columnNumber: 11
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                lineNumber: 188,
+                lineNumber: 189,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -874,29 +875,29 @@ function ImportClient({ userId }) {
                             className: "w-4 h-4"
                         }, void 0, false, {
                             fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                            lineNumber: 249,
+                            lineNumber: 250,
                             columnNumber: 11
                         }, this),
                         "Export Semua Dokumen"
                     ]
                 }, void 0, true, {
                     fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                    lineNumber: 247,
+                    lineNumber: 248,
                     columnNumber: 9
                 }, this)
             }, void 0, false, {
                 fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-                lineNumber: 246,
+                lineNumber: 247,
                 columnNumber: 7
             }, this)
         ]
     }, void 0, true, {
         fileName: "[project]/app/dashboard/documents/import/import-client.tsx",
-        lineNumber: 84,
+        lineNumber: 85,
         columnNumber: 5
     }, this);
 }
-_s(ImportClient, "nnXPxOjLSKARWnct8HEpK3nbT70=", false, function() {
+_s(ImportClient, "88Lxu8cN3CtI2x2gNjenBJ2cpt4=", false, function() {
     return [
         __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$navigation$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useRouter"]
     ];

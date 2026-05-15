@@ -2,6 +2,7 @@ import { auth } from '@/auth';
 import { redirect } from 'next/navigation';
 import { getCategories, getDocumentTypes, getDepartments } from '@/app/lib/data';
 import DocumentForm from '@/app/ui/document-form';
+import { Breadcrumb } from '@/app/ui/breadcrumb';
 
 export default async function CreateDocumentPage() {
   const session = await auth();
@@ -15,6 +16,10 @@ export default async function CreateDocumentPage() {
 
   return (
     <div className="max-w-3xl mx-auto">
+      <Breadcrumb items={[
+        { label: 'Dokumen', href: '/dashboard/documents' },
+        { label: 'Tambah Dokumen' },
+      ]} />
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-slate-800">Tambah Dokumen</h1>
         <p className="text-sm text-slate-400 mt-1">Isi form berikut untuk menambahkan dokumen baru</p>

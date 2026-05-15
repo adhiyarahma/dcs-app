@@ -5,10 +5,11 @@ module.exports = {
 
 var { g: global, __dirname } = __turbopack_context__;
 {
-/* __next_internal_action_entry_do_not_use__ [{"4023115649a6e16d337f67f2ce9284f88fa86401e8":"deleteCategory","4028502937bc7adf072f1d950240ef4428d7ad40be":"createCategory","404c288c474665b6cf88e3395a939ee33f3274b1df":"createDepartment","4050f5acfc0a5052a627be5a1541a4c7631d0df686":"createDocumentType","405ffe762ffdc0e93835d5b35af6a0086443d0578c":"createUser","40690461ee71f8e6844d20a7aba722d382cb36e107":"deleteDocument","40733692f74aabe76904b9302c16fc76aaf078f16b":"deleteDocumentType","4080f5df2bb34df5e20d566556c958cb979af13368":"deleteDepartment","4084a36451310a29981a931a17a214e47f595730ee":"deleteDocumentFile","40b2e9c07449a0e1f0f723f2190b354877892cd320":"createDocument","40bdc919e58e2fa500054d51856883460d8762e747":"deleteUser","603a69596a1ba93b0159b2c000c90365abbd4b0be2":"updateCategory","6073e723732cf793551aeaa5e574a4927ece98fa10":"updateDocument","609a2c5d6196a2228a3bc689c5cc58d84649cc8254":"updateUser","60aae1bbf41d933b3af1d0bfcb401fa4abf09c6ae8":"updateDepartment","60da7274974873f649dc073ebb13e07479a9706ede":"resetPassword","60f056e16991ded0bf0940ddcb301415f1a7b53c4e":"updateDocumentType","7c15162ad5d4c132ee5879d8a445e76d4a93a13586":"saveDocumentFile"},"",""] */ __turbopack_context__.s({
+/* __next_internal_action_entry_do_not_use__ [{"401a799df25cd1a48970d95eda3abc6d07b3d52570":"createDocument","40378c0e43681ccc7d86c0ffb80284d1207f2c4e98":"restoreDocument","4047c801e2a2cc971ab4bbc18ef6911e66fc5738b5":"deleteDocumentType","40518519e616a7e56c934d678218fc8a2599cc614b":"createUser","4063e19e7b30012c9b399499a40c0f9130dcdce3b2":"deleteDocumentFile","407bc2f44c19aaa23d87228f320ec5dd4f05ecf61f":"deleteDocument","40a0c845fe13d63fa8abc7b89c5e8d096889e03bb7":"deleteUser","40a2795b9d5f54f3d4e256c3223cfa29b4225b0efe":"deleteDepartment","40ad42778dda1e94d209bd0e425c01376c0840b1c4":"createCategory","40c1c346aee24c2295d4e726bf8308ce1d6ce66fd2":"deleteCategory","40d7b51022acd3fb5a103cb77e7bdeac87a967a5df":"createDepartment","40e41f9c7c2448bcffb970e6f4507a568f8962b63c":"createDocumentType","6017fcd56f770abc0397d6d66134c3fac92e54399f":"updateDepartment","60610bc1fecc9a03852ea1dbbbb22cc5044dc9fec6":"createDocumentRevision","60621f0a03cea676d1e0e6202b55d26a7e19a3d031":"updateDocumentType","60935eb0c5d07d7dc591a4a15b4457af8c63d82733":"updateCategory","60c103d97d69f579aa99221f385627ab0903822f91":"updateUser","60e655a0a668c769ce6f84154af553c3492aaf5cfd":"resetPassword","60ef5758d9f67f24f29236be88de49451312114428":"updateDocumentOnly","7cffea494f9c9376ceec923e980d5920e92d8528a8":"saveDocumentFile"},"",""] */ __turbopack_context__.s({
     "createCategory": (()=>createCategory),
     "createDepartment": (()=>createDepartment),
     "createDocument": (()=>createDocument),
+    "createDocumentRevision": (()=>createDocumentRevision),
     "createDocumentType": (()=>createDocumentType),
     "createUser": (()=>createUser),
     "deleteCategory": (()=>deleteCategory),
@@ -18,10 +19,11 @@ var { g: global, __dirname } = __turbopack_context__;
     "deleteDocumentType": (()=>deleteDocumentType),
     "deleteUser": (()=>deleteUser),
     "resetPassword": (()=>resetPassword),
+    "restoreDocument": (()=>restoreDocument),
     "saveDocumentFile": (()=>saveDocumentFile),
     "updateCategory": (()=>updateCategory),
     "updateDepartment": (()=>updateDepartment),
-    "updateDocument": (()=>updateDocument),
+    "updateDocumentOnly": (()=>updateDocumentOnly),
     "updateDocumentType": (()=>updateDocumentType),
     "updateUser": (()=>updateUser)
 });
@@ -376,7 +378,10 @@ async function saveDocumentFile(documentId, fileLabel, fileUrl, fileName, fileTy
         await sql`
       INSERT INTO document_files (document_id, file_label, file_url, file_name, file_type)
       VALUES (${documentId}, ${fileLabel}, ${fileUrl}, ${fileName}, ${fileType})
-      ON CONFLICT DO NOTHING
+      ON CONFLICT (document_id, file_label) DO UPDATE SET
+        file_url = EXCLUDED.file_url,
+        file_name = EXCLUDED.file_name,
+        file_type = EXCLUDED.file_type
     `;
         return {
             success: true
@@ -400,30 +405,20 @@ async function deleteDocument(id) {
         };
     }
 }
-async function updateDocument(id, formData) {
+async function updateDocumentOnly(id, formData) {
     const title = formData.get('title')?.trim();
     const doc_number = formData.get('doc_number')?.trim();
-    const revision = parseInt(formData.get('revision')) || 1;
+    const revision = parseInt(formData.get('revision')) || 0;
     const department_id = formData.get('department_id') || null;
     const effective_date = formData.get('effective_date');
     const revision_date = formData.get('revision_date') || null;
     const expiry_date = formData.get('expiry_date') || null;
-    if (!title || !doc_number || !effective_date) {
-        return {
-            error: 'Field wajib belum lengkap.'
-        };
-    }
     try {
         await sql`
       UPDATE documents SET
-        title = ${title},
-        doc_number = ${doc_number},
-        revision = ${revision},
-        department_id = ${department_id},
-        effective_date = ${effective_date},
-        revision_date = ${revision_date},
-        expiry_date = ${expiry_date},
-        updated_at = NOW()
+        title = ${title}, doc_number = ${doc_number}, revision = ${revision},
+        department_id = ${department_id}, effective_date = ${effective_date},
+        revision_date = ${revision_date}, expiry_date = ${expiry_date}, updated_at = NOW()
       WHERE id = ${id}
     `;
         (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$cache$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["revalidatePath"])('/dashboard/documents');
@@ -436,6 +431,70 @@ async function updateDocument(id, formData) {
         };
         return {
             error: 'Gagal mengupdate dokumen.'
+        };
+    }
+}
+async function createDocumentRevision(oldId, formData) {
+    const title = formData.get('title')?.trim();
+    const doc_number = formData.get('doc_number')?.trim();
+    const category_id = formData.get('category_id');
+    const type_id = formData.get('type_id');
+    const revision = parseInt(formData.get('revision')) || 0;
+    const department_id = formData.get('department_id') || null;
+    const effective_date = formData.get('effective_date');
+    const revision_date = formData.get('revision_date') || null;
+    const expiry_date = formData.get('expiry_date') || null;
+    const uploaded_by = formData.get('uploaded_by');
+    try {
+        // Tandai semua revisi lama doc_number ini sebagai kadaluarsa
+        await sql`
+      UPDATE documents SET status = 'kadaluarsa', updated_at = NOW()
+      WHERE doc_number = ${doc_number} AND status = 'terbaru'
+    `;
+        // Insert revisi baru
+        const result = await sql`
+      INSERT INTO documents
+        (doc_number, title, category_id, type_id, department_id, revision,
+         effective_date, revision_date, expiry_date, uploaded_by, status)
+      VALUES
+        (${doc_number}, ${title}, ${category_id}, ${type_id}, ${department_id},
+         ${revision}, ${effective_date}, ${revision_date}, ${expiry_date},
+         ${uploaded_by}, 'terbaru')
+      RETURNING id
+    `;
+        (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$cache$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["revalidatePath"])('/dashboard/documents');
+        return {
+            success: true,
+            id: result[0].id
+        };
+    } catch (error) {
+        if (error?.code === '23505') return {
+            error: 'Nomor dokumen dengan revisi ini sudah ada.'
+        };
+        return {
+            error: 'Gagal membuat revisi dokumen.'
+        };
+    }
+}
+async function restoreDocument(id) {
+    try {
+        // Cek apakah doc_number ini sudah punya revisi terbaru
+        const doc = await sql`SELECT doc_number FROM documents WHERE id = ${id}`;
+        const hasLatest = await sql`
+      SELECT id FROM documents
+      WHERE doc_number = ${doc[0].doc_number} AND status = 'terbaru'
+    `;
+        // Pulihkan: jika belum ada yg terbaru, jadikan ini terbaru; jika sudah ada, jadikan kadaluarsa
+        const newStatus = hasLatest.length === 0 ? 'terbaru' : 'kadaluarsa';
+        await sql`UPDATE documents SET status = ${newStatus}, updated_at = NOW() WHERE id = ${id}`;
+        (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$cache$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["revalidatePath"])('/dashboard/documents');
+        (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$cache$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["revalidatePath"])('/dashboard/documents/trash');
+        return {
+            success: true
+        };
+    } catch  {
+        return {
+            error: 'Gagal memulihkan dokumen.'
         };
     }
 }
@@ -469,27 +528,31 @@ async function deleteDocumentFile(fileId) {
     createDocument,
     saveDocumentFile,
     deleteDocument,
-    updateDocument,
+    updateDocumentOnly,
+    createDocumentRevision,
+    restoreDocument,
     deleteDocumentFile
 ]);
-(0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$webpack$2f$loaders$2f$next$2d$flight$2d$loader$2f$server$2d$reference$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerServerReference"])(createUser, "405ffe762ffdc0e93835d5b35af6a0086443d0578c", null);
-(0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$webpack$2f$loaders$2f$next$2d$flight$2d$loader$2f$server$2d$reference$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerServerReference"])(updateUser, "609a2c5d6196a2228a3bc689c5cc58d84649cc8254", null);
-(0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$webpack$2f$loaders$2f$next$2d$flight$2d$loader$2f$server$2d$reference$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerServerReference"])(resetPassword, "60da7274974873f649dc073ebb13e07479a9706ede", null);
-(0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$webpack$2f$loaders$2f$next$2d$flight$2d$loader$2f$server$2d$reference$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerServerReference"])(deleteUser, "40bdc919e58e2fa500054d51856883460d8762e747", null);
-(0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$webpack$2f$loaders$2f$next$2d$flight$2d$loader$2f$server$2d$reference$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerServerReference"])(createCategory, "4028502937bc7adf072f1d950240ef4428d7ad40be", null);
-(0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$webpack$2f$loaders$2f$next$2d$flight$2d$loader$2f$server$2d$reference$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerServerReference"])(updateCategory, "603a69596a1ba93b0159b2c000c90365abbd4b0be2", null);
-(0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$webpack$2f$loaders$2f$next$2d$flight$2d$loader$2f$server$2d$reference$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerServerReference"])(deleteCategory, "4023115649a6e16d337f67f2ce9284f88fa86401e8", null);
-(0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$webpack$2f$loaders$2f$next$2d$flight$2d$loader$2f$server$2d$reference$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerServerReference"])(createDocumentType, "4050f5acfc0a5052a627be5a1541a4c7631d0df686", null);
-(0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$webpack$2f$loaders$2f$next$2d$flight$2d$loader$2f$server$2d$reference$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerServerReference"])(updateDocumentType, "60f056e16991ded0bf0940ddcb301415f1a7b53c4e", null);
-(0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$webpack$2f$loaders$2f$next$2d$flight$2d$loader$2f$server$2d$reference$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerServerReference"])(deleteDocumentType, "40733692f74aabe76904b9302c16fc76aaf078f16b", null);
-(0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$webpack$2f$loaders$2f$next$2d$flight$2d$loader$2f$server$2d$reference$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerServerReference"])(createDepartment, "404c288c474665b6cf88e3395a939ee33f3274b1df", null);
-(0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$webpack$2f$loaders$2f$next$2d$flight$2d$loader$2f$server$2d$reference$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerServerReference"])(updateDepartment, "60aae1bbf41d933b3af1d0bfcb401fa4abf09c6ae8", null);
-(0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$webpack$2f$loaders$2f$next$2d$flight$2d$loader$2f$server$2d$reference$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerServerReference"])(deleteDepartment, "4080f5df2bb34df5e20d566556c958cb979af13368", null);
-(0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$webpack$2f$loaders$2f$next$2d$flight$2d$loader$2f$server$2d$reference$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerServerReference"])(createDocument, "40b2e9c07449a0e1f0f723f2190b354877892cd320", null);
-(0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$webpack$2f$loaders$2f$next$2d$flight$2d$loader$2f$server$2d$reference$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerServerReference"])(saveDocumentFile, "7c15162ad5d4c132ee5879d8a445e76d4a93a13586", null);
-(0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$webpack$2f$loaders$2f$next$2d$flight$2d$loader$2f$server$2d$reference$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerServerReference"])(deleteDocument, "40690461ee71f8e6844d20a7aba722d382cb36e107", null);
-(0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$webpack$2f$loaders$2f$next$2d$flight$2d$loader$2f$server$2d$reference$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerServerReference"])(updateDocument, "6073e723732cf793551aeaa5e574a4927ece98fa10", null);
-(0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$webpack$2f$loaders$2f$next$2d$flight$2d$loader$2f$server$2d$reference$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerServerReference"])(deleteDocumentFile, "4084a36451310a29981a931a17a214e47f595730ee", null);
+(0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$webpack$2f$loaders$2f$next$2d$flight$2d$loader$2f$server$2d$reference$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerServerReference"])(createUser, "40518519e616a7e56c934d678218fc8a2599cc614b", null);
+(0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$webpack$2f$loaders$2f$next$2d$flight$2d$loader$2f$server$2d$reference$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerServerReference"])(updateUser, "60c103d97d69f579aa99221f385627ab0903822f91", null);
+(0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$webpack$2f$loaders$2f$next$2d$flight$2d$loader$2f$server$2d$reference$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerServerReference"])(resetPassword, "60e655a0a668c769ce6f84154af553c3492aaf5cfd", null);
+(0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$webpack$2f$loaders$2f$next$2d$flight$2d$loader$2f$server$2d$reference$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerServerReference"])(deleteUser, "40a0c845fe13d63fa8abc7b89c5e8d096889e03bb7", null);
+(0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$webpack$2f$loaders$2f$next$2d$flight$2d$loader$2f$server$2d$reference$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerServerReference"])(createCategory, "40ad42778dda1e94d209bd0e425c01376c0840b1c4", null);
+(0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$webpack$2f$loaders$2f$next$2d$flight$2d$loader$2f$server$2d$reference$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerServerReference"])(updateCategory, "60935eb0c5d07d7dc591a4a15b4457af8c63d82733", null);
+(0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$webpack$2f$loaders$2f$next$2d$flight$2d$loader$2f$server$2d$reference$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerServerReference"])(deleteCategory, "40c1c346aee24c2295d4e726bf8308ce1d6ce66fd2", null);
+(0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$webpack$2f$loaders$2f$next$2d$flight$2d$loader$2f$server$2d$reference$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerServerReference"])(createDocumentType, "40e41f9c7c2448bcffb970e6f4507a568f8962b63c", null);
+(0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$webpack$2f$loaders$2f$next$2d$flight$2d$loader$2f$server$2d$reference$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerServerReference"])(updateDocumentType, "60621f0a03cea676d1e0e6202b55d26a7e19a3d031", null);
+(0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$webpack$2f$loaders$2f$next$2d$flight$2d$loader$2f$server$2d$reference$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerServerReference"])(deleteDocumentType, "4047c801e2a2cc971ab4bbc18ef6911e66fc5738b5", null);
+(0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$webpack$2f$loaders$2f$next$2d$flight$2d$loader$2f$server$2d$reference$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerServerReference"])(createDepartment, "40d7b51022acd3fb5a103cb77e7bdeac87a967a5df", null);
+(0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$webpack$2f$loaders$2f$next$2d$flight$2d$loader$2f$server$2d$reference$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerServerReference"])(updateDepartment, "6017fcd56f770abc0397d6d66134c3fac92e54399f", null);
+(0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$webpack$2f$loaders$2f$next$2d$flight$2d$loader$2f$server$2d$reference$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerServerReference"])(deleteDepartment, "40a2795b9d5f54f3d4e256c3223cfa29b4225b0efe", null);
+(0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$webpack$2f$loaders$2f$next$2d$flight$2d$loader$2f$server$2d$reference$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerServerReference"])(createDocument, "401a799df25cd1a48970d95eda3abc6d07b3d52570", null);
+(0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$webpack$2f$loaders$2f$next$2d$flight$2d$loader$2f$server$2d$reference$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerServerReference"])(saveDocumentFile, "7cffea494f9c9376ceec923e980d5920e92d8528a8", null);
+(0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$webpack$2f$loaders$2f$next$2d$flight$2d$loader$2f$server$2d$reference$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerServerReference"])(deleteDocument, "407bc2f44c19aaa23d87228f320ec5dd4f05ecf61f", null);
+(0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$webpack$2f$loaders$2f$next$2d$flight$2d$loader$2f$server$2d$reference$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerServerReference"])(updateDocumentOnly, "60ef5758d9f67f24f29236be88de49451312114428", null);
+(0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$webpack$2f$loaders$2f$next$2d$flight$2d$loader$2f$server$2d$reference$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerServerReference"])(createDocumentRevision, "60610bc1fecc9a03852ea1dbbbb22cc5044dc9fec6", null);
+(0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$webpack$2f$loaders$2f$next$2d$flight$2d$loader$2f$server$2d$reference$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerServerReference"])(restoreDocument, "40378c0e43681ccc7d86c0ffb80284d1207f2c4e98", null);
+(0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$webpack$2f$loaders$2f$next$2d$flight$2d$loader$2f$server$2d$reference$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerServerReference"])(deleteDocumentFile, "4063e19e7b30012c9b399499a40c0f9130dcdce3b2", null);
 }}),
 "[project]/.next-internal/server/app/dashboard/documents/page/actions.js { ACTIONS_MODULE0 => \"[project]/app/lib/actions.ts [app-rsc] (ecmascript)\" } [app-rsc] (server actions loader, ecmascript) <locals>": ((__turbopack_context__) => {
 "use strict";
@@ -515,7 +578,7 @@ var __TURBOPACK__imported__module__$5b$project$5d2f2e$next$2d$internal$2f$server
 var { g: global, __dirname } = __turbopack_context__;
 {
 __turbopack_context__.s({
-    "40690461ee71f8e6844d20a7aba722d382cb36e107": (()=>__TURBOPACK__imported__module__$5b$project$5d2f$app$2f$lib$2f$actions$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["deleteDocument"])
+    "407bc2f44c19aaa23d87228f320ec5dd4f05ecf61f": (()=>__TURBOPACK__imported__module__$5b$project$5d2f$app$2f$lib$2f$actions$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["deleteDocument"])
 });
 var __TURBOPACK__imported__module__$5b$project$5d2f$app$2f$lib$2f$actions$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/app/lib/actions.ts [app-rsc] (ecmascript)");
 var __TURBOPACK__imported__module__$5b$project$5d2f2e$next$2d$internal$2f$server$2f$app$2f$dashboard$2f$documents$2f$page$2f$actions$2e$js__$7b$__ACTIONS_MODULE0__$3d3e$__$225b$project$5d2f$app$2f$lib$2f$actions$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$2922$__$7d$__$5b$app$2d$rsc$5d$__$28$server__actions__loader$2c$__ecmascript$29$__$3c$locals$3e$__ = __turbopack_context__.i('[project]/.next-internal/server/app/dashboard/documents/page/actions.js { ACTIONS_MODULE0 => "[project]/app/lib/actions.ts [app-rsc] (ecmascript)" } [app-rsc] (server actions loader, ecmascript) <locals>');
@@ -526,7 +589,7 @@ var __TURBOPACK__imported__module__$5b$project$5d2f2e$next$2d$internal$2f$server
 var { g: global, __dirname } = __turbopack_context__;
 {
 __turbopack_context__.s({
-    "40690461ee71f8e6844d20a7aba722d382cb36e107": (()=>__TURBOPACK__imported__module__$5b$project$5d2f2e$next$2d$internal$2f$server$2f$app$2f$dashboard$2f$documents$2f$page$2f$actions$2e$js__$7b$__ACTIONS_MODULE0__$3d3e$__$225b$project$5d2f$app$2f$lib$2f$actions$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$2922$__$7d$__$5b$app$2d$rsc$5d$__$28$server__actions__loader$2c$__ecmascript$29$__$3c$exports$3e$__["40690461ee71f8e6844d20a7aba722d382cb36e107"])
+    "407bc2f44c19aaa23d87228f320ec5dd4f05ecf61f": (()=>__TURBOPACK__imported__module__$5b$project$5d2f2e$next$2d$internal$2f$server$2f$app$2f$dashboard$2f$documents$2f$page$2f$actions$2e$js__$7b$__ACTIONS_MODULE0__$3d3e$__$225b$project$5d2f$app$2f$lib$2f$actions$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$2922$__$7d$__$5b$app$2d$rsc$5d$__$28$server__actions__loader$2c$__ecmascript$29$__$3c$exports$3e$__["407bc2f44c19aaa23d87228f320ec5dd4f05ecf61f"])
 });
 var __TURBOPACK__imported__module__$5b$project$5d2f2e$next$2d$internal$2f$server$2f$app$2f$dashboard$2f$documents$2f$page$2f$actions$2e$js__$7b$__ACTIONS_MODULE0__$3d3e$__$225b$project$5d2f$app$2f$lib$2f$actions$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$2922$__$7d$__$5b$app$2d$rsc$5d$__$28$server__actions__loader$2c$__ecmascript$29$__$3c$module__evaluation$3e$__ = __turbopack_context__.i('[project]/.next-internal/server/app/dashboard/documents/page/actions.js { ACTIONS_MODULE0 => "[project]/app/lib/actions.ts [app-rsc] (ecmascript)" } [app-rsc] (server actions loader, ecmascript) <module evaluation>');
 var __TURBOPACK__imported__module__$5b$project$5d2f2e$next$2d$internal$2f$server$2f$app$2f$dashboard$2f$documents$2f$page$2f$actions$2e$js__$7b$__ACTIONS_MODULE0__$3d3e$__$225b$project$5d2f$app$2f$lib$2f$actions$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$2922$__$7d$__$5b$app$2d$rsc$5d$__$28$server__actions__loader$2c$__ecmascript$29$__$3c$exports$3e$__ = __turbopack_context__.i('[project]/.next-internal/server/app/dashboard/documents/page/actions.js { ACTIONS_MODULE0 => "[project]/app/lib/actions.ts [app-rsc] (ecmascript)" } [app-rsc] (server actions loader, ecmascript) <exports>');
@@ -552,8 +615,10 @@ __turbopack_context__.s({
     "getCategories": (()=>getCategories),
     "getDepartments": (()=>getDepartments),
     "getDocumentById": (()=>getDocumentById),
+    "getDocumentHistory": (()=>getDocumentHistory),
     "getDocumentTypes": (()=>getDocumentTypes),
     "getDocumentsByCategory": (()=>getDocumentsByCategory),
+    "getTrashedDocuments": (()=>getTrashedDocuments),
     "getUsers": (()=>getUsers)
 });
 var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$postgres$2f$src$2f$index$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/node_modules/postgres/src/index.js [app-rsc] (ecmascript)");
@@ -562,15 +627,10 @@ const sql = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$
     ssl: 'require'
 });
 async function getUsers() {
-    const users = await sql`
-    SELECT id, name, email, role, created_at
-    FROM users
-    ORDER BY created_at DESC
-  `;
-    return users;
+    return sql`SELECT id, name, email, role, created_at FROM users ORDER BY created_at DESC`;
 }
 async function getCategories() {
-    const categories = await sql`
+    return sql`
     SELECT c.id, c.name, c.created_at,
       COUNT(dt.id)::int AS type_count
     FROM categories c
@@ -578,29 +638,37 @@ async function getCategories() {
     GROUP BY c.id
     ORDER BY c.created_at ASC
   `;
-    return categories;
 }
 async function getDocumentTypes() {
-    const types = await sql`
+    return sql`
     SELECT dt.id, dt.name, dt.created_at,
       dt.category_id, c.name AS category_name
     FROM document_types dt
     JOIN categories c ON c.id = dt.category_id
     ORDER BY c.name ASC, dt.name ASC
   `;
-    return types;
 }
 async function getDepartments() {
-    const departments = await sql`
-    SELECT id, code, name
-    FROM departments
-    ORDER BY code ASC
-  `;
-    return departments;
+    return sql`SELECT id, code, name FROM departments ORDER BY code ASC`;
+}
+// ============================================================
+// DOCUMENTS — hanya revisi terbaru (bukan dihapus)
+// ============================================================
+async function attachFiles(documents) {
+    return Promise.all(documents.map(async (doc)=>{
+        const files = await sql`
+      SELECT id, file_label, file_url, file_name, file_type
+      FROM document_files WHERE document_id = ${doc.id}
+    `;
+        return {
+            ...doc,
+            files
+        };
+    }));
 }
 async function getDocumentsByCategory(categoryId) {
     const documents = await sql`
-    SELECT 
+    SELECT
       d.id, d.doc_number, d.title, d.revision,
       d.effective_date, d.revision_date, d.expiry_date,
       d.status, d.created_at, d.updated_at,
@@ -614,42 +682,72 @@ async function getDocumentsByCategory(categoryId) {
     LEFT JOIN departments dep ON dep.id = d.department_id
     LEFT JOIN users u ON u.id = d.uploaded_by
     WHERE d.category_id = ${categoryId}
-      AND d.status != 'dihapus'
+      AND d.status IN ('terbaru', 'kadaluarsa')
     ORDER BY d.doc_number ASC, d.revision DESC
   `;
-    // Fetch files untuk setiap dokumen
-    const documentsWithFiles = await Promise.all(documents.map(async (doc)=>{
-        const files = await sql`
-        SELECT id, file_label, file_url, file_name, file_type
-        FROM document_files
-        WHERE document_id = ${doc.id}
-      `;
-        return {
-            ...doc,
-            files
-        };
-    }));
-    return documentsWithFiles;
+    return attachFiles(documents);
+}
+async function getDocumentHistory(docNumber) {
+    const documents = await sql`
+    SELECT
+      d.id, d.doc_number, d.title, d.revision,
+      d.effective_date, d.revision_date, d.expiry_date,
+      d.status, d.created_at, d.updated_at,
+      d.category_id, d.type_id,
+      dt.name AS type_name,
+      dep.code AS department_code,
+      u.name AS uploaded_by_name
+    FROM documents d
+    JOIN document_types dt ON dt.id = d.type_id
+    LEFT JOIN departments dep ON dep.id = d.department_id
+    LEFT JOIN users u ON u.id = d.uploaded_by
+    WHERE d.doc_number = ${docNumber}
+      AND d.status != 'dihapus'
+    ORDER BY d.revision DESC
+  `;
+    return attachFiles(documents);
+}
+async function getTrashedDocuments() {
+    const documents = await sql`
+    SELECT
+      d.id, d.doc_number, d.title, d.revision,
+      d.effective_date, d.status, d.updated_at,
+      d.category_id,
+      c.name AS category_name,
+      dt.name AS type_name,
+      dep.code AS department_code,
+      u.name AS uploaded_by_name
+    FROM documents d
+    JOIN categories c ON c.id = d.category_id
+    JOIN document_types dt ON dt.id = d.type_id
+    LEFT JOIN departments dep ON dep.id = d.department_id
+    LEFT JOIN users u ON u.id = d.uploaded_by
+    WHERE d.status = 'dihapus'
+    ORDER BY d.updated_at DESC
+  `;
+    return attachFiles(documents);
 }
 async function getDocumentById(id) {
     const doc = await sql`
-    SELECT d.id, d.doc_number, d.title, d.revision, d.status, d.category_id, d.type_id, d.department_id,
+    SELECT d.id, d.doc_number, d.title, d.revision, d.status,
+      d.category_id, d.type_id, d.department_id,
       TO_CHAR(d.effective_date, 'YYYY-MM-DD') AS effective_date,
       TO_CHAR(d.revision_date, 'YYYY-MM-DD') AS revision_date,
       TO_CHAR(d.expiry_date, 'YYYY-MM-DD') AS expiry_date,
       dt.name AS type_name,
+      c.name AS category_name,
       dep.code AS department_code,
       dep.name AS department_name
     FROM documents d
     JOIN document_types dt ON dt.id = d.type_id
+    JOIN categories c ON c.id = d.category_id
     LEFT JOIN departments dep ON dep.id = d.department_id
     WHERE d.id = ${id}
   `;
     if (!doc[0]) return null;
     const files = await sql`
     SELECT id, file_label, file_url, file_name, file_type
-    FROM document_files
-    WHERE document_id = ${id}
+    FROM document_files WHERE document_id = ${id}
   `;
     return {
         ...doc[0],

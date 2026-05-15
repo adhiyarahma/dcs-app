@@ -22,6 +22,7 @@ export default function ImportClient({ userId }: { userId: string }) {
   const [result, setResult] = useState<{ success: number; errors: string[]; total: number } | null>(null);
   const [zipResult, setZipResult] = useState<{ success: number; errors: string[]; total: number } | null>(null);
   const [importDone, setImportDone] = useState(false);
+  const [allowZipDirect, setAllowZipDirect] = useState(false);
 
   useEffect(() => {
     fetch('/api/master-data').then(r => r.json()).then(data => {
@@ -33,7 +34,7 @@ export default function ImportClient({ userId }: { userId: string }) {
   const filteredTypes = docTypes.filter(t => t.category_id === selectedCategory);
   const step2Active = !!(selectedCategory && selectedType);
   const step3Active = !!(selectedCategory && selectedType && file);
-  const step4Active = importDone;
+  const step4Active = importDone || allowZipDirect;
   const templateUrl = step2Active
     ? `/api/export-documents/template?category_id=${selectedCategory}&type_id=${selectedType}`
     : null;

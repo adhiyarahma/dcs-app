@@ -2,8 +2,10 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { updateDocument, saveDocumentFile, deleteDocumentFile } from '@/app/lib/actions';
+import { updateDocumentOnly, createDocumentRevision, saveDocumentFile, deleteDocumentFile } from '@/app/lib/actions';
 import { CloudArrowUpIcon, XMarkIcon, DocumentIcon, TrashIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline';
+import { Toast } from '@/app/ui/toast';
+import { Toast } from '@/app/ui/toast';
 import clsx from 'clsx';
 
 type Department = { id: string; code: string; name: string };
@@ -60,6 +62,10 @@ export default function DocumentEditForm({
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [showRevisionModal, setShowRevisionModal] = useState(false);
+  const [pendingFormData, setPendingFormData] = useState<FormData | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   const category = categories.find(c => c.id === document.category_id);
   const docType = documentTypes.find(t => t.id === document.type_id);
@@ -87,11 +93,13 @@ export default function DocumentEditForm({
     }
   }
 
-  async function uploadFile(file: File, docNumber: string, label: string): Promise<string> {
+  async function uploadFile(file: File, docNumber: string, label: string, revision?: number): Promise<string> {
     const ext = file.name.split('.').pop();
     const categorySlug = slugify(category?.name ?? 'uncategorized');
     const typeSlug = slugify(docType?.name ?? 'unknown');
-    const path = `${categorySlug}/${typeSlug}/${docNumber}/${label}-${Date.now()}.${ext}`;
+    const safeDocNumber = docNumber.replace(///g, '-').replace(/s+/g, '_');
+    const revStr = String(revision ?? 0).padStart(2, '0');
+    const path = `${categorySlug}/${typeSlug}/${safeDocNumber}/rev-${revStr}/${label}-${Date.now()}.${ext}`;
 
     const fd = new FormData();
     fd.append('file', file);
@@ -105,46 +113,62 @@ export default function DocumentEditForm({
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    setPendingFormData(formData);
+    setShowRevisionModal(true);
+  }
+
+  async function handleSaveChoice(mode: 'update_only' | 'new_revision') {
+    setShowRevisionModal(false);
     setLoading(true);
     setError('');
-
-    const formData = new FormData(e.currentTarget);
+    const formData = pendingFormData;
+    formData.set('uploaded_by', userId);
 
     try {
-      // 1. Update data dokumen
-      const result = await updateDocument(document.id, formData);
-      if (result?.error) {
-        setError(result.error);
-        setLoading(false);
-        return;
+      if (mode === 'update_only') {
+        const result = await updateDocumentOnly(document.id, formData);
+        if (result?.error) { setError(result.error); setLoading(false); return; }
+
+        const docNumber = formData.get('doc_number') as string;
+        for (const [label, file] of Object.entries(newFiles)) {
+          const oldFile = getExistingFile(label);
+          if (oldFile) await deleteDocumentFile(oldFile.id);
+          const url = await uploadFile(file, docNumber, label, document.revision);
+          const ext = file.name.split('.').pop() ?? 'pdf';
+          await saveDocumentFile(document.id, label, url, file.name, ext);
+        }
+        setToast({ message: 'Dokumen berhasil diperbarui!', type: 'success' });
+        setTimeout(() => router.push('/dashboard/documents'), 1800);
+
+      } else {
+        const result = await createDocumentRevision(document.id, formData);
+        if (result?.error) { setError(result.error); setLoading(false); return; }
+
+        const newDocId = result.id as string;
+        const docNumber = formData.get('doc_number') as string;
+        const newRevision = parseInt(formData.get('revision') as string) || document.revision;
+
+        for (const [label, file] of Object.entries(newFiles)) {
+          const url = await uploadFile(file, docNumber, label, newRevision);
+          const ext = file.name.split('.').pop() ?? 'pdf';
+          await saveDocumentFile(newDocId, label, url, file.name, ext);
+        }
+        setToast({ message: 'Revisi baru berhasil dibuat!', type: 'success' });
+        setTimeout(() => router.push('/dashboard/documents'), 1800);
       }
-
-      const docNumber = formData.get('doc_number') as string;
-
-      // 2. Upload file baru (jika ada)
-      for (const [label, file] of Object.entries(newFiles)) {
-        if (!file) continue;
-
-        // Hapus file lama dengan label yang sama jika ada
-        const oldFile = getExistingFile(label);
-        if (oldFile) await deleteDocumentFile(oldFile.id);
-
-        // Upload file baru
-        const url = await uploadFile(file, docNumber, label);
-        const ext = file.name.split('.').pop() ?? 'pdf';
-        await saveDocumentFile(document.id, label, url, file.name, ext);
-      }
-
-      router.push('/dashboard/documents');
     } catch (err: any) {
       setError(err.message ?? 'Terjadi kesalahan.');
+      setToast({ message: err.message ?? 'Gagal menyimpan.', type: 'error' });
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <>
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+      <form onSubmit={handleSubmit} className="space-y-6">
       {error && (
         <div className="p-4 bg-red-50 border border-red-200 text-red-600 rounded-xl text-sm">{error}</div>
       )}

@@ -173,6 +173,12 @@ async function POST(req) {
         }, {
             status: 400
         });
+        // Ambil semua departemen sekali (hindari N+1 query)
+        const allDeps = await sql`SELECT id, LOWER(code) AS code FROM departments`;
+        const deptMap = Object.fromEntries(allDeps.map((d)=>[
+                d.code,
+                d.id
+            ]));
         let success = 0;
         const errors = [];
         for(let i = 0; i < rows.length; i++){
@@ -192,9 +198,8 @@ async function POST(req) {
                 }
                 let department_id = null;
                 if (department_code) {
-                    const deps = await sql`SELECT id FROM departments WHERE LOWER(code) = LOWER(${department_code}) LIMIT 1`;
-                    if (deps[0]) department_id = deps[0].id;
-                    else {
+                    department_id = deptMap[department_code.toLowerCase()] ?? null;
+                    if (!department_id) {
                         errors.push(`Baris ${rowNum}: Kode Bagian "${department_code}" tidak ditemukan.`);
                         continue;
                     }

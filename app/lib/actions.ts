@@ -268,7 +268,10 @@ export async function saveDocumentFile(
     await sql`
       INSERT INTO document_files (document_id, file_label, file_url, file_name, file_type)
       VALUES (${documentId}, ${fileLabel}, ${fileUrl}, ${fileName}, ${fileType})
-      ON CONFLICT DO NOTHING
+      ON CONFLICT (document_id, file_label) DO UPDATE SET
+        file_url = EXCLUDED.file_url,
+        file_name = EXCLUDED.file_name,
+        file_type = EXCLUDED.file_type
     `;
     return { success: true };
   } catch {
@@ -287,32 +290,24 @@ export async function deleteDocument(id: string) {
 }
 
 // ============================================================
-// UPDATE DOCUMENT
+// UPDATE DOCUMENT — koreksi data saja (no. dokumen & revisi tidak berubah)
 // ============================================================
-export async function updateDocument(id: string, formData: FormData) {
+export async function updateDocumentOnly(id: string, formData: FormData) {
   const title = (formData.get('title') as string)?.trim();
   const doc_number = (formData.get('doc_number') as string)?.trim();
-  const revision = parseInt(formData.get('revision') as string) || 1;
+  const revision = parseInt(formData.get('revision') as string) || 0;
   const department_id = formData.get('department_id') as string || null;
   const effective_date = formData.get('effective_date') as string;
   const revision_date = formData.get('revision_date') as string || null;
   const expiry_date = formData.get('expiry_date') as string || null;
 
-  if (!title || !doc_number || !effective_date) {
-    return { error: 'Field wajib belum lengkap.' };
-  }
 
   try {
     await sql`
       UPDATE documents SET
-        title = ${title},
-        doc_number = ${doc_number},
-        revision = ${revision},
-        department_id = ${department_id},
-        effective_date = ${effective_date},
-        revision_date = ${revision_date},
-        expiry_date = ${expiry_date},
-        updated_at = NOW()
+        title = ${title}, doc_number = ${doc_number}, revision = ${revision},
+        department_id = ${department_id}, effective_date = ${effective_date},
+        revision_date = ${revision_date}, expiry_date = ${expiry_date}, updated_at = NOW()
       WHERE id = ${id}
     `;
     revalidatePath('/dashboard/documents');
@@ -322,6 +317,75 @@ export async function updateDocument(id: string, formData: FormData) {
     return { error: 'Gagal mengupdate dokumen.' };
   }
 }
+
+// ============================================================
+// CREATE DOCUMENT REVISION — buat revisi baru, tandai lama sebagai kadaluarsa
+// ============================================================
+export async function createDocumentRevision(oldId: string, formData: FormData) {
+  const title = (formData.get('title') as string)?.trim();
+  const doc_number = (formData.get('doc_number') as string)?.trim();
+  const category_id = formData.get('category_id') as string;
+  const type_id = formData.get('type_id') as string;
+  const revision = parseInt(formData.get('revision') as string) || 0;
+  const department_id = formData.get('department_id') as string || null;
+  const effective_date = formData.get('effective_date') as string;
+  const revision_date = formData.get('revision_date') as string || null;
+  const expiry_date = formData.get('expiry_date') as string || null;
+  const uploaded_by = formData.get('uploaded_by') as string;
+
+
+  try {
+    // Tandai semua revisi lama doc_number ini sebagai kadaluarsa
+    await sql`
+      UPDATE documents SET status = 'kadaluarsa', updated_at = NOW()
+      WHERE doc_number = ${doc_number} AND status = 'terbaru'
+    `;
+
+    // Insert revisi baru
+    const result = await sql`
+      INSERT INTO documents
+        (doc_number, title, category_id, type_id, department_id, revision,
+         effective_date, revision_date, expiry_date, uploaded_by, status)
+      VALUES
+        (${doc_number}, ${title}, ${category_id}, ${type_id}, ${department_id},
+         ${revision}, ${effective_date}, ${revision_date}, ${expiry_date},
+         ${uploaded_by}, 'terbaru')
+      RETURNING id
+    `;
+
+    revalidatePath('/dashboard/documents');
+    return { success: true, id: result[0].id };
+  } catch (error: any) {
+    if (error?.code === '23505') return { error: 'Nomor dokumen dengan revisi ini sudah ada.' };
+    return { error: 'Gagal membuat revisi dokumen.' };
+  }
+}
+
+// ============================================================
+// RESTORE DOCUMENT — pulihkan dari recycle bin
+// ============================================================
+export async function restoreDocument(id: string) {
+  try {
+    // Cek apakah doc_number ini sudah punya revisi terbaru
+    const doc = await sql`SELECT doc_number FROM documents WHERE id = ${id}`;
+
+    const hasLatest = await sql`
+      SELECT id FROM documents
+      WHERE doc_number = ${doc[0].doc_number} AND status = 'terbaru'
+    `;
+
+    // Pulihkan: jika belum ada yg terbaru, jadikan ini terbaru; jika sudah ada, jadikan kadaluarsa
+    const newStatus = hasLatest.length === 0 ? 'terbaru' : 'kadaluarsa';
+    await sql`UPDATE documents SET status = ${newStatus}, updated_at = NOW() WHERE id = ${id}`;
+    revalidatePath('/dashboard/documents');
+    revalidatePath('/dashboard/documents/trash');
+    return { success: true };
+  } catch {
+    return { error: 'Gagal memulihkan dokumen.' };
+  }
+}
+
+
 
 export async function deleteDocumentFile(fileId: string) {
   try {

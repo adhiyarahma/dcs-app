@@ -37,6 +37,10 @@ export async function POST(req: NextRequest) {
 
     if (rows.length === 0) return NextResponse.json({ error: 'File Excel kosong.' }, { status: 400 });
 
+    // Ambil semua departemen sekali (hindari N+1 query)
+    const allDeps = await sql`SELECT id, LOWER(code) AS code FROM departments`;
+    const deptMap: Record<string, string> = Object.fromEntries(allDeps.map(d => [d.code, d.id]));
+
     let success = 0;
     const errors: string[] = [];
 
@@ -57,11 +61,13 @@ export async function POST(req: NextRequest) {
           continue;
         }
 
-        let department_id = null;
+        let department_id: string | null = null;
         if (department_code) {
-          const deps = await sql`SELECT id FROM departments WHERE LOWER(code) = LOWER(${department_code}) LIMIT 1`;
-          if (deps[0]) department_id = deps[0].id;
-          else { errors.push(`Baris ${rowNum}: Kode Bagian "${department_code}" tidak ditemukan.`); continue; }
+          department_id = deptMap[department_code.toLowerCase()] ?? null;
+          if (!department_id) {
+            errors.push(`Baris ${rowNum}: Kode Bagian "${department_code}" tidak ditemukan.`);
+            continue;
+          }
         }
 
         const formatDate = (val: any) => {

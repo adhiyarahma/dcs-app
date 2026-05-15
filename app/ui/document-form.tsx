@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { createDocument, saveDocumentFile } from '@/app/lib/actions';
 import { CloudArrowUpIcon, XMarkIcon, DocumentIcon } from '@heroicons/react/24/outline';
+import { Toast } from '@/app/ui/toast';
+import { Toast } from '@/app/ui/toast';
 import clsx from 'clsx';
 
 type Category = { id: string; name: string };
@@ -91,6 +93,8 @@ export default function DocumentForm({
 }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [error, setError] = useState('');
   const [selectedCategoryId, setSelectedCategoryId] = useState('');
   const [selectedTypeId, setSelectedTypeId] = useState('');
@@ -140,13 +144,16 @@ export default function DocumentForm({
     docNumber: string,
     label: string,
     categoryName: string,
-    typeName: string
+    typeName: string,
+    revision?: number
   ): Promise<string> {
     const ext = file.name.split('.').pop();
     const categorySlug = slugify(categoryName);
     const typeSlug = slugify(typeName);
-    // Struktur: category/type/doc-number/label-timestamp.ext
-    const path = `${categorySlug}/${typeSlug}/${docNumber}/${label}-${Date.now()}.${ext}`;
+    const safeDocNumber = docNumber.replace(///g, '-').replace(/s+/g, '_');
+    const revStr = String(revision ?? 0).padStart(2, '0');
+    // Struktur: category/type/doc_number/rev-XX/label-timestamp.ext
+    const path = `${categorySlug}/${typeSlug}/${safeDocNumber}/rev-${revStr}/${label}-${Date.now()}.${ext}`;
 
     const fd = new FormData();
     fd.append('file', file);
@@ -180,27 +187,33 @@ export default function DocumentForm({
 
       for (const field of fileFields) {
         if (!field.file) continue;
+        const revisionNum = parseInt(formData.get('revision') as string) || 0;
         const url = await uploadFile(
           field.file,
           docNumber,
           field.label,
           selectedCategory?.name ?? 'uncategorized',
-          selectedType?.name ?? 'unknown'
+          selectedType?.name ?? 'unknown',
+          revisionNum
         );
         const ext = field.file.name.split('.').pop() ?? 'pdf';
         await saveDocumentFile(documentId, field.label, url, field.file.name, ext);
       }
 
-      router.push('/dashboard/documents');
+      setToast({ message: 'Dokumen berhasil disimpan!', type: 'success' });
+      setTimeout(() => router.push('/dashboard/documents'), 1800);
     } catch (err: any) {
       setError(err.message ?? 'Terjadi kesalahan.');
+      setToast({ message: err.message ?? 'Gagal menyimpan dokumen.', type: 'error' });
+      setToast({ message: err.message ?? 'Gagal menyimpan dokumen.', type: 'error' });
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+      <form onSubmit={handleSubmit} className="space-y-6">
       {error && (
         <div className="p-4 bg-red-50 border border-red-200 text-red-600 rounded-xl text-sm">{error}</div>
       )}

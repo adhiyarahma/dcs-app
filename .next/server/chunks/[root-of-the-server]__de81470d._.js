@@ -208,11 +208,9 @@ async function POST(req) {
         let skipped = 0;
         const errors = [];
         for (const entry of directory.files){
-            // Skip folder dan file tersembunyi
             if (entry.type === 'Directory') continue;
             const filename = entry.path.split('/').pop() ?? '';
             if (filename.startsWith('.') || filename.startsWith('__')) continue;
-            // Parse nama file: {doc_number}_{label}.{ext}
             const dotIdx = filename.lastIndexOf('.');
             if (dotIdx === -1) {
                 errors.push(`${filename}: ekstensi tidak ditemukan.`);
@@ -224,7 +222,6 @@ async function POST(req) {
             let doc_number;
             let label;
             if (underscoreIdx === -1) {
-                // Tidak ada underscore — gunakan ext sebagai label
                 doc_number = nameWithoutExt;
                 label = ext;
             } else {
@@ -235,17 +232,17 @@ async function POST(req) {
                 errors.push(`${filename}: format nama tidak valid (gunakan doc_number_label.ext).`);
                 continue;
             }
-            // Cari dokumen di database
             const docs = await sql`SELECT id, doc_number FROM documents WHERE doc_number = ${doc_number} LIMIT 1`;
             if (!docs[0]) {
                 errors.push(`${filename}: dokumen "${doc_number}" tidak ditemukan di database.`);
                 continue;
             }
             const docId = docs[0].id;
-            // Upload ke Supabase
             const fileBuffer = await entry.buffer();
             const contentType = ext === 'pdf' ? 'application/pdf' : ext === 'docx' ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' : ext === 'xlsx' ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' : 'application/octet-stream';
-            const storagePath = `imports/${doc_number}/${label}-${Date.now()}.${ext}`;
+            // Encode doc_number agar karakter '/' tidak membuat subfolder tak terduga
+            const safeDocNumber = doc_number.replace(/\//g, '-').replace(/\s+/g, '_');
+            const storagePath = `imports/${safeDocNumber}/${label}-${Date.now()}.${ext}`;
             const { error: uploadError } = await supabase.storage.from('documents').upload(storagePath, fileBuffer, {
                 contentType,
                 upsert: true
@@ -256,9 +253,7 @@ async function POST(req) {
             }
             const { data: urlData } = supabase.storage.from('documents').getPublicUrl(storagePath);
             const publicUrl = urlData.publicUrl;
-            // Hapus file lama dengan label sama jika ada
             await sql`DELETE FROM document_files WHERE document_id = ${docId} AND file_label = ${label}`;
-            // Simpan ke database
             await sql`
         INSERT INTO document_files (document_id, file_label, file_url, file_name, file_type)
         VALUES (${docId}, ${label}, ${publicUrl}, ${filename}, ${ext})
