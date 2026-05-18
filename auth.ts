@@ -2,7 +2,7 @@ import NextAuth from 'next-auth';
 import Credentials from 'next-auth/providers/credentials';
 import { authConfig } from './auth.config';
 import { z } from 'zod';
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs'; // ganti dari 'bcrypt'
 import type { User } from '@/app/lib/definitions';
 import { supabaseAdmin } from '@/app/lib/supabase';
 

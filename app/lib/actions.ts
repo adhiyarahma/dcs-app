@@ -1,6 +1,6 @@
 'use server';
 
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import { revalidatePath } from 'next/cache';
 import { supabaseAdmin } from '@/app/lib/supabase';
@@ -280,51 +280,46 @@ export async function createDocument(formData: FormData) {
   const expiry_date = (formData.get('expiry_date') as string) || null;
   const uploaded_by = formData.get('uploaded_by') as string;
 
-  if (!doc_number || !title || !category_id || !type_id || !effective_date) {
+  if (!doc_number || !title || !category_id || !type_id || !effective_date)
     return { error: 'Field wajib belum lengkap.' };
-  }
 
   try {
     const { data, error } = await supabaseAdmin
       .from('documents')
-      .insert({
-        doc_number, title, category_id, type_id, department_id,
-        revision, effective_date, revision_date, expiry_date,
-        uploaded_by, status: 'terbaru',
-      })
+      .insert({ doc_number, title, category_id, type_id, department_id, revision, effective_date, revision_date, expiry_date, uploaded_by, status: 'terbaru' })
       .select('id')
       .single();
-
     if (error) {
       if (error.code === '23505') return { error: 'Nomor dokumen dengan revisi ini sudah ada.' };
       return { error: 'Gagal membuat dokumen.' };
     }
     revalidatePath('/dashboard/documents');
     return { success: true, id: data.id };
-  } catch {
-    return { error: 'Gagal membuat dokumen.' };
-  }
+  } catch { return { error: 'Gagal membuat dokumen.' }; }
 }
 
-export async function saveDocumentFile(
-  documentId: string,
-  fileLabel: string,
-  fileUrl: string,
-  fileName: string,
-  fileType: string
-) {
+export async function updateDocument(id: string, formData: FormData) {
+  const title = (formData.get('title') as string)?.trim();
+  const doc_number = (formData.get('doc_number') as string)?.trim();
+  const type_id = formData.get('type_id') as string;
+  const revision = parseInt(formData.get('revision') as string) || 0;
+  const department_id = (formData.get('department_id') as string) || null;
+  const effective_date = formData.get('effective_date') as string;
+  const revision_date = (formData.get('revision_date') as string) || null;
+  const expiry_date = (formData.get('expiry_date') as string) || null;
+
   try {
     const { error } = await supabaseAdmin
-      .from('document_files')
-      .upsert(
-        { document_id: documentId, file_label: fileLabel, file_url: fileUrl, file_name: fileName, file_type: fileType },
-        { onConflict: 'document_id,file_label' }
-      );
-    if (error) return { error: 'Gagal menyimpan file.' };
+      .from('documents')
+      .update({ title, doc_number, type_id, revision, department_id, effective_date, revision_date, expiry_date, updated_at: new Date().toISOString() })
+      .eq('id', id);
+    if (error) {
+      if (error.code === '23505') return { error: 'Nomor dokumen dengan revisi ini sudah ada.' };
+      return { error: 'Gagal mengupdate dokumen.' };
+    }
+    revalidatePath('/dashboard/documents');
     return { success: true };
-  } catch {
-    return { error: 'Gagal menyimpan file.' };
-  }
+  } catch { return { error: 'Gagal mengupdate dokumen.' }; }
 }
 
 export async function deleteDocument(id: string) {
@@ -336,122 +331,44 @@ export async function deleteDocument(id: string) {
     if (error) return { error: 'Gagal menghapus dokumen.' };
     revalidatePath('/dashboard/documents');
     return { success: true };
-  } catch {
-    return { error: 'Gagal menghapus dokumen.' };
-  }
-}
-
-export async function updateDocumentOnly(id: string, formData: FormData) {
-  const title = (formData.get('title') as string)?.trim();
-  const doc_number = (formData.get('doc_number') as string)?.trim();
-  const revision = parseInt(formData.get('revision') as string) || 0;
-  const department_id = (formData.get('department_id') as string) || null;
-  const effective_date = formData.get('effective_date') as string;
-  const revision_date = (formData.get('revision_date') as string) || null;
-  const expiry_date = (formData.get('expiry_date') as string) || null;
-
-  try {
-    const { error } = await supabaseAdmin
-      .from('documents')
-      .update({
-        title, doc_number, revision, department_id,
-        effective_date, revision_date, expiry_date,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', id);
-    if (error) {
-      if (error.code === '23505') return { error: 'Nomor dokumen dengan revisi ini sudah ada.' };
-      return { error: 'Gagal mengupdate dokumen.' };
-    }
-    revalidatePath('/dashboard/documents');
-    return { success: true };
-  } catch {
-    return { error: 'Gagal mengupdate dokumen.' };
-  }
-}
-
-export async function createDocumentRevision(oldId: string, formData: FormData) {
-  const title = (formData.get('title') as string)?.trim();
-  const doc_number = (formData.get('doc_number') as string)?.trim();
-  const category_id = formData.get('category_id') as string;
-  const type_id = formData.get('type_id') as string;
-  const revision = parseInt(formData.get('revision') as string) || 0;
-  const department_id = (formData.get('department_id') as string) || null;
-  const effective_date = formData.get('effective_date') as string;
-  const revision_date = (formData.get('revision_date') as string) || null;
-  const expiry_date = (formData.get('expiry_date') as string) || null;
-  const uploaded_by = formData.get('uploaded_by') as string;
-
-  try {
-    // Tandai semua revisi lama sebagai kadaluarsa
-    const { error: expireError } = await supabaseAdmin
-      .from('documents')
-      .update({ status: 'kadaluarsa', updated_at: new Date().toISOString() })
-      .eq('doc_number', doc_number)
-      .eq('status', 'terbaru');
-    if (expireError) return { error: 'Gagal membuat revisi dokumen.' };
-
-    // Insert revisi baru
-    const { data, error } = await supabaseAdmin
-      .from('documents')
-      .insert({
-        doc_number, title, category_id, type_id, department_id,
-        revision, effective_date, revision_date, expiry_date,
-        uploaded_by, status: 'terbaru',
-      })
-      .select('id')
-      .single();
-
-    if (error) {
-      if (error.code === '23505') return { error: 'Nomor dokumen dengan revisi ini sudah ada.' };
-      return { error: 'Gagal membuat revisi dokumen.' };
-    }
-    revalidatePath('/dashboard/documents');
-    return { success: true, id: data.id };
-  } catch {
-    return { error: 'Gagal membuat revisi dokumen.' };
-  }
+  } catch { return { error: 'Gagal menghapus dokumen.' }; }
 }
 
 export async function restoreDocument(id: string) {
   try {
-    const { data: doc, error: fetchError } = await supabaseAdmin
-      .from('documents')
-      .select('doc_number')
-      .eq('id', id)
-      .single();
-    if (fetchError || !doc) return { error: 'Gagal memulihkan dokumen.' };
-
-    const { data: existing } = await supabaseAdmin
-      .from('documents')
-      .select('id')
-      .eq('doc_number', doc.doc_number)
-      .eq('status', 'terbaru');
-
-    const newStatus = !existing || existing.length === 0 ? 'terbaru' : 'kadaluarsa';
     const { error } = await supabaseAdmin
       .from('documents')
-      .update({ status: newStatus, updated_at: new Date().toISOString() })
+      .update({ status: 'terbaru', updated_at: new Date().toISOString() })
       .eq('id', id);
-
     if (error) return { error: 'Gagal memulihkan dokumen.' };
     revalidatePath('/dashboard/documents');
-    revalidatePath('/dashboard/documents/trash');
     return { success: true };
-  } catch {
-    return { error: 'Gagal memulihkan dokumen.' };
-  }
+  } catch { return { error: 'Gagal memulihkan dokumen.' }; }
 }
 
-export async function deleteDocumentFile(fileId: string) {
+export async function saveDocumentFile(documentId: string, fileLabel: string, fileUrl: string, fileName: string, fileType: string) {
+  try {
+    const { error } = await supabaseAdmin
+      .from('document_files')
+      .upsert(
+        { document_id: documentId, file_label: fileLabel, file_url: fileUrl, file_name: fileName, file_type: fileType },
+        { onConflict: 'document_id,file_label' }
+      );
+    if (error) return { error: 'Gagal menyimpan file.' };
+    revalidatePath('/dashboard/documents');
+    return { success: true };
+  } catch { return { error: 'Gagal menyimpan file.' }; }
+}
+
+export async function deleteDocumentFile(documentId: string, fileLabel: string) {
   try {
     const { error } = await supabaseAdmin
       .from('document_files')
       .delete()
-      .eq('id', fileId);
+      .eq('document_id', documentId)
+      .eq('file_label', fileLabel);
     if (error) return { error: 'Gagal menghapus file.' };
+    revalidatePath('/dashboard/documents');
     return { success: true };
-  } catch {
-    return { error: 'Gagal menghapus file.' };
-  }
+  } catch { return { error: 'Gagal menghapus file.' }; }
 }

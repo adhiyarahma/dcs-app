@@ -4,8 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 import {
-  HomeIcon, DocumentTextIcon, UsersIcon,
-  CircleStackIcon, ChevronDownIcon, ChevronRightIcon,
+  HomeIcon, UsersIcon, CircleStackIcon, ChevronDownIcon, ChevronRightIcon, DocumentTextIcon,
   TagIcon, DocumentDuplicateIcon, BuildingOfficeIcon,
 } from '@heroicons/react/24/outline';
 import { signOut } from 'next-auth/react';
