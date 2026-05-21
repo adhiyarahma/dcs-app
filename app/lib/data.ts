@@ -165,3 +165,26 @@ export async function getDocumentById(id: string) {
   };
 }
 
+export async function fetchDeletedDocuments() {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('documents')
+      .select(`
+        id,
+        doc_number,
+        title,
+        revision,
+        updated_at,
+        users ( name )
+      `)
+      .eq('status', 'dihapus')
+      .order('updated_at', { ascending: false });
+
+    if (error) throw new Error('Gagal mengambil data trash.');
+    return data;
+  } catch (error) {
+    console.error('Database Error:', error);
+    throw new Error('Gagal mengambil data trash.');
+  }
+}
+

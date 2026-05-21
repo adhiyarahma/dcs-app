@@ -336,14 +336,56 @@ export async function deleteDocument(id: string) {
 
 export async function restoreDocument(id: string) {
   try {
-    const { error } = await supabaseAdmin
+    // 1. Dapatkan doc_number dari dokumen yang diklik
+    const { data: doc, error: fetchError } = await supabaseAdmin
+      .from('documents')
+      .select('doc_number')
+      .eq('id', id)
+      .single();
+
+    if (fetchError || !doc) return { error: 'Dokumen tidak ditemukan.' };
+
+    // 2. Ambil seluruh riwayat revisi dokumen tersebut
+    const { data: allRevisions, error: historyError } = await supabaseAdmin
+      .from('documents')
+      .select('id, revision')
+      .eq('doc_number', doc.doc_number)
+      .order('revision', { ascending: false }); // Urutkan dari revisi tertinggi ke terendah
+
+    if (historyError || !allRevisions || allRevisions.length === 0) {
+      return { error: 'Gagal mengambil riwayat dokumen.' };
+    }
+
+    // 3. Pisahkan ID revisi tertinggi dan ID revisi lama
+    const highestRevisionId = allRevisions[0].id;
+    const olderRevisionIds = allRevisions.slice(1).map(d => d.id);
+
+    // 4. Update revisi tertinggi menjadi 'terbaru'
+    const { error: restoreLatestError } = await supabaseAdmin
       .from('documents')
       .update({ status: 'terbaru', updated_at: new Date().toISOString() })
-      .eq('id', id);
-    if (error) return { error: 'Gagal memulihkan dokumen.' };
+      .eq('id', highestRevisionId);
+
+    if (restoreLatestError) return { error: 'Gagal memulihkan dokumen terbaru.' };
+
+    // 5. Update revisi lama menjadi 'kadaluarsa' (jika ada riwayatnya)
+    if (olderRevisionIds.length > 0) {
+      const { error: restoreOldError } = await supabaseAdmin
+        .from('documents')
+        .update({ status: 'kadaluarsa', updated_at: new Date().toISOString() })
+        .in('id', olderRevisionIds);
+
+      if (restoreOldError) return { error: 'Gagal memulihkan riwayat dokumen lama.' };
+    }
+
+    // Refresh halaman agar tabel ter-update
     revalidatePath('/dashboard/documents');
+    revalidatePath('/dashboard/trash'); // Pastikan halaman trash juga di-refresh
+    
     return { success: true };
-  } catch { return { error: 'Gagal memulihkan dokumen.' }; }
+  } catch { 
+    return { error: 'Gagal memulihkan dokumen.' }; 
+  }
 }
 
 export async function saveDocumentFile(documentId: string, fileLabel: string, fileUrl: string, fileName: string, fileType: string) {

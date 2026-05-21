@@ -164,7 +164,7 @@ function EditModeSelector({
               sebagai <span className="font-medium">kadaluarsa</span>, dan versi baru dibuat dengan nomor revisi berikutnya.
             </p>
             <p className="text-xs text-amber-600 font-medium mt-2 group-hover:text-amber-700">
-              Rev {String(document.revision).padStart(2, '0')} → kadaluarsa &nbsp;·&nbsp; Baru: Rev {String(document.revision + 1).padStart(2, '0')}
+              Rev {String(document.revision).padStart(2, '0')} → kadaluarsa &nbsp;·&nbsp; Baru: Rev {String(nextRevision).padStart(2, '0')}
             </p>
           </div>
         </div>

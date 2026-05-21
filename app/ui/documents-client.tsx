@@ -107,6 +107,15 @@ export default function DocumentsClient({ documents, categories, departments, do
               Tambah Dokumen
             </a>
           )}
+          {isAdmin && (
+            <a
+              href="/dashboard/documents/trash"
+              className="flex items-center justify-center gap-2 bg-red-800 text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:bg-red-700 transition-all active:scale-95 shrink-0"
+            >
+              <TrashIcon className="w-4 h-4" />
+              Trash
+            </a>
+          )}
         </div>
 
         {/* Filter row */}
