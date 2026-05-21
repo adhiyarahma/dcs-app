@@ -274,7 +274,7 @@ export async function createDocument(formData: FormData) {
   const category_id = formData.get('category_id') as string;
   const type_id = formData.get('type_id') as string;
   const department_id = (formData.get('department_id') as string) || null;
-  const revision = parseInt(formData.get('revision') as string) || 1;
+  const revision = parseInt(formData.get('revision') as string ?? '0');
   const effective_date = formData.get('effective_date') as string;
   const revision_date = (formData.get('revision_date') as string) || null;
   const expiry_date = (formData.get('expiry_date') as string) || null;
@@ -372,3 +372,139 @@ export async function deleteDocumentFile(documentId: string, fileLabel: string) 
     return { success: true };
   } catch { return { error: 'Gagal menghapus file.' }; }
 }
+
+export async function correctDocument(id: string, formData: FormData) {
+  const title = (formData.get('title') as string)?.trim();
+  const type_id = formData.get('type_id') as string;
+  const department_id = (formData.get('department_id') as string) || null;
+  const effective_date = formData.get('effective_date') as string;
+  const revision_date = (formData.get('revision_date') as string) || null;
+  const expiry_date = (formData.get('expiry_date') as string) || null;
+  const new_status = formData.get('status') as string;
+
+  if (!title || !type_id || !effective_date)
+    return { error: 'Field wajib belum lengkap.' };
+
+  try {
+    // Jika status diubah ke dihapus, update semua doc_number yang sama
+    if (new_status === 'dihapus') {
+      // Ambil doc_number dokumen ini dulu
+      const { data: doc } = await supabaseAdmin
+        .from('documents')
+        .select('doc_number')
+        .eq('id', id)
+        .single();
+
+      if (!doc) return { error: 'Dokumen tidak ditemukan.' };
+
+      const { error } = await supabaseAdmin
+        .from('documents')
+        .update({ status: 'dihapus', updated_at: new Date().toISOString() })
+        .eq('doc_number', doc.doc_number);
+
+      if (error) return { error: 'Gagal mengubah status dokumen.' };
+
+      revalidatePath('/dashboard/documents');
+      return { success: true };
+    }
+
+    // Koreksi biasa
+    const { error } = await supabaseAdmin
+      .from('documents')
+      .update({
+        title,
+        type_id,
+        department_id,
+        effective_date,
+        revision_date,
+        expiry_date,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id);
+
+    if (error) return { error: 'Gagal menyimpan koreksi dokumen.' };
+
+    revalidatePath('/dashboard/documents');
+    return { success: true };
+  } catch {
+    return { error: 'Gagal menyimpan koreksi dokumen.' };
+  }
+}
+
+export async function reviseDocument(
+  oldId: string,
+  oldRevision: number,
+  uploadedBy: string,
+  formData: FormData,
+) {
+  const title = (formData.get('title') as string)?.trim();
+  const doc_number = (formData.get('doc_number') as string)?.trim();
+  const category_id = formData.get('category_id') as string;
+  const type_id = formData.get('type_id') as string;
+  const department_id = (formData.get('department_id') as string) || null;
+  const effective_date = formData.get('effective_date') as string;
+  const revision_date = (formData.get('revision_date') as string) || null;
+  const expiry_date = (formData.get('expiry_date') as string) || null;
+
+  if (!title || !type_id || !effective_date || !doc_number)
+    return { error: 'Field wajib belum lengkap.' };
+
+  // Validasi: effective_date harus berbeda dari dokumen lama
+  const { data: oldDoc } = await supabaseAdmin
+    .from('documents')
+    .select('effective_date')
+    .eq('id', oldId)
+    .single();
+
+  if (oldDoc && oldDoc.effective_date === effective_date)
+    return { error: 'Tanggal efektif harus berbeda dari dokumen sebelumnya.' };
+
+  // Hitung revisi baru: setelah 8 kembali ke 0
+  const MAX_REVISION = 8;
+  const newRevision = oldRevision >= MAX_REVISION ? 0 : oldRevision + 1;
+
+  try {
+    const { error: expireError } = await supabaseAdmin
+      .from('documents')
+      .update({ status: 'kadaluarsa', updated_at: new Date().toISOString() })
+      .eq('id', oldId);
+
+    if (expireError) return { error: 'Gagal memproses revisi (step 1).' };
+
+    const { data, error: insertError } = await supabaseAdmin
+      .from('documents')
+      .insert({
+        doc_number,
+        title,
+        category_id,
+        type_id,
+        department_id,
+        revision: newRevision,
+        effective_date,
+        revision_date,
+        expiry_date,
+        status: 'terbaru',
+        parent_id: oldId,
+        uploaded_by: uploadedBy,
+      })
+      .select('id')
+      .single();
+
+    if (insertError) {
+      await supabaseAdmin
+        .from('documents')
+        .update({ status: 'terbaru', updated_at: new Date().toISOString() })
+        .eq('id', oldId);
+
+      if (insertError.code === '23505')
+        return { error: 'Terjadi konflik: sudah ada dokumen dengan revisi ini.' };
+      return { error: 'Gagal memproses revisi (step 2).' };
+    }
+
+    revalidatePath('/dashboard/documents');
+    return { success: true, newId: data.id };
+  } catch {
+    return { error: 'Gagal memproses revisi dokumen.' };
+  }
+}
+

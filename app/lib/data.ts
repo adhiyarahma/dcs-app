@@ -137,8 +137,10 @@ export async function getDocumentById(id: string) {
   const { data: doc } = await supabaseAdmin
     .from('documents')
     .select(`
-      id, doc_number, title, revision, status, category_id, type_id, department_id,
+      id, doc_number, title, revision, status,
+      category_id, type_id, department_id,
       effective_date, revision_date, expiry_date,
+      parent_id, uploaded_by,
       document_types!inner(name),
       categories!inner(name),
       departments(code, name)
@@ -162,3 +164,4 @@ export async function getDocumentById(id: string) {
     files: files ?? [],
   };
 }
+
