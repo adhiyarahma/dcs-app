@@ -4,8 +4,9 @@ import { useState, useMemo } from 'react';
 import clsx from 'clsx';
 import {
   MagnifyingGlassIcon, PlusIcon, PencilIcon, TrashIcon,
-  XMarkIcon, ExclamationTriangleIcon, DocumentTextIcon,
-  FunnelIcon, ChevronDownIcon,
+  ExclamationTriangleIcon, DocumentTextIcon,
+  FunnelIcon, ChevronDownIcon, CheckBadgeIcon, ClockIcon,
+  ChevronUpIcon, ChevronUpDownIcon
 } from '@heroicons/react/24/outline';
 import { deleteDocument } from '@/app/lib/actions';
 
@@ -19,6 +20,9 @@ type Doc = {
 type Category = { id: string; name: string; };
 type Department = { id: string; code: string; name: string; };
 type DocType = { id: string; name: string; category_id: string; category_name: string; };
+
+type SortKey = 'doc_number' | 'title' | 'revision' | 'effective_date' | 'category_name' | 'department_code' | 'status';
+type SortOrder = 'asc' | 'desc';
 
 function DeleteModal({ doc, onConfirm, onCancel, loading }: {
   doc: Doc; onConfirm: () => void; onCancel: () => void; loading: boolean;
@@ -58,15 +62,40 @@ export default function DocumentsClient({ documents, categories, departments, do
   const [deleteTarget, setDeleteTarget] = useState<Doc | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const filtered = useMemo(() => documents.filter(d => {
-    const matchSearch = !search ||
-      d.title.toLowerCase().includes(search.toLowerCase()) ||
-      d.doc_number.toLowerCase().includes(search.toLowerCase());
-    const matchCat = !filterCategory || d.category_id === filterCategory;
-    const matchDept = !filterDept || d.department_id === filterDept;
-    const matchStatus = !filterStatus || d.status === filterStatus;
-    return matchSearch && matchCat && matchDept && matchStatus;
-  }), [documents, search, filterCategory, filterDept, filterStatus]);
+  // State untuk Sorting
+  const [sortKey, setSortKey] = useState<SortKey>('effective_date');
+  const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
+
+  const processedDocs = useMemo(() => {
+    // 1. Lakukan Filtering
+    let result = documents.filter(d => {
+      const matchSearch = !search ||
+        d.title.toLowerCase().includes(search.toLowerCase()) ||
+        d.doc_number.toLowerCase().includes(search.toLowerCase());
+      const matchCat = !filterCategory || d.category_id === filterCategory;
+      const matchDept = !filterDept || d.department_id === filterDept;
+      const matchStatus = !filterStatus || d.status === filterStatus;
+      return matchSearch && matchCat && matchDept && matchStatus;
+    });
+
+    // 2. Lakukan Sorting
+    result.sort((a, b) => {
+      let valA = a[sortKey] || '';
+      let valB = b[sortKey] || '';
+
+      // Khusus untuk tanggal, kita gunakan object Date untuk perbandingan
+      if (sortKey === 'effective_date') {
+        valA = new Date(valA as string).getTime();
+        valB = new Date(valB as string).getTime();
+      }
+
+      if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
+      if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
+      return 0;
+    });
+
+    return result;
+  }, [documents, search, filterCategory, filterDept, filterStatus, sortKey, sortOrder]);
 
   async function handleDelete() {
     if (!deleteTarget) return;
@@ -76,16 +105,76 @@ export default function DocumentsClient({ documents, categories, departments, do
     setDeleteTarget(null);
   }
 
+  // Fungsi untuk menangani klik pada header kolom
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortKey(key);
+      setSortOrder('asc');
+    }
+  };
+
+  // Komponen kecil untuk merender Header Kolom dengan Icon Sort
+  const SortableHeader = ({ label, sortKeyParam }: { label: string, sortKeyParam: SortKey }) => {
+    const isActive = sortKey === sortKeyParam;
+    return (
+      <th 
+        className="text-left px-6 py-3 text-[11px] font-bold text-slate-400 uppercase tracking-widest cursor-pointer hover:bg-slate-100 hover:text-slate-600 transition-colors group select-none"
+        onClick={() => handleSort(sortKeyParam)}
+      >
+        <div className="flex items-center gap-1.5">
+          {label}
+          <span className="text-slate-300 group-hover:text-slate-400">
+            {!isActive ? (
+              <ChevronUpDownIcon className="w-3.5 h-3.5" />
+            ) : sortOrder === 'asc' ? (
+              <ChevronUpIcon className="w-3.5 h-3.5 text-blue-600" />
+            ) : (
+              <ChevronDownIcon className="w-3.5 h-3.5 text-blue-600" />
+            )}
+          </span>
+        </div>
+      </th>
+    );
+  };
+
+  const totalDokumen = documents.length;
+  const totalTerbaru = documents.filter(doc => doc.status === 'terbaru').length;
+  const totalKadaluarsa = documents.filter(doc => doc.status === 'kadaluarsa').length;
+
   return (
     <div className="space-y-5">
-      {/* Stat card */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-4 flex items-center gap-4 shadow-sm">
-        <div className="p-3 bg-blue-50 rounded-xl text-blue-600 shrink-0">
-          <DocumentTextIcon className="w-6 h-6" />
+      {/* Stat cards (Grid 3 Kolom) */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="bg-white border border-slate-200 rounded-2xl p-4 flex items-center gap-4 shadow-sm">
+          <div className="p-3 bg-blue-50 rounded-xl text-blue-600 shrink-0">
+            <DocumentTextIcon className="w-6 h-6" />
+          </div>
+          <div>
+            <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">Total Dokumen</p>
+            <p className="text-2xl font-bold text-slate-900">{totalDokumen}</p>
+          </div>
         </div>
-        <div>
-          <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">Total Dokumen</p>
-          <p className="text-2xl font-bold text-slate-900">{documents.length}</p>
+
+        <div className="bg-white border border-slate-200 rounded-2xl p-4 flex items-center gap-4 shadow-sm">
+          <div className="p-3 bg-emerald-50 rounded-xl text-emerald-600 shrink-0">
+            <CheckBadgeIcon className="w-6 h-6" />
+          </div>
+          <div>
+            <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">Dokumen Terbaru</p>
+            <p className="text-2xl font-bold text-slate-900">{totalTerbaru}</p>
+          </div>
+        </div>
+
+        <div className="bg-white border border-slate-200 rounded-2xl p-4 flex items-center gap-4 shadow-sm">
+          <div className="p-3 bg-rose-50 rounded-xl text-rose-600 shrink-0">
+            <ClockIcon className="w-6 h-6" />
+          </div>
+          <div>
+            <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">Dokumen Kadaluarsa</p>
+            <p className="text-2xl font-bold text-slate-900">{totalKadaluarsa}</p>
+          </div>
         </div>
       </div>
 
@@ -99,21 +188,13 @@ export default function DocumentsClient({ documents, categories, departments, do
               onChange={e => setSearch(e.target.value)} />
           </div>
           {isAdmin && (
-            <a
-              href="/dashboard/documents/new"
-              className="flex items-center justify-center gap-2 bg-slate-900 text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:bg-slate-800 transition-all active:scale-95 shrink-0"
-            >
-              <PlusIcon className="w-4 h-4" />
-              Tambah Dokumen
+            <a href="/dashboard/documents/new" className="flex items-center justify-center gap-2 bg-slate-900 text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:bg-slate-800 transition-all active:scale-95 shrink-0">
+              <PlusIcon className="w-4 h-4" /> Tambah Dokumen
             </a>
           )}
           {isAdmin && (
-            <a
-              href="/dashboard/documents/trash"
-              className="flex items-center justify-center gap-2 bg-red-800 text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:bg-red-700 transition-all active:scale-95 shrink-0"
-            >
-              <TrashIcon className="w-4 h-4" />
-              Trash
+            <a href="/dashboard/trash" className="flex items-center justify-center gap-2 bg-red-800 text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:bg-red-700 transition-all active:scale-95 shrink-0">
+              <TrashIcon className="w-4 h-4" /> Trash
             </a>
           )}
         </div>
@@ -164,27 +245,33 @@ export default function DocumentsClient({ documents, categories, departments, do
           <table className="w-full border-collapse">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-100">
-                <th className="text-left px-6 py-3 text-[11px] font-bold text-slate-400 uppercase tracking-widest">No. Dok</th>
-                <th className="text-left px-6 py-3 text-[11px] font-bold text-slate-400 uppercase tracking-widest">Judul</th>
-                <th className="text-left px-6 py-3 text-[11px] font-bold text-slate-400 uppercase tracking-widest">Kategori / Jenis</th>
-                <th className="text-left px-6 py-3 text-[11px] font-bold text-slate-400 uppercase tracking-widest">Dept</th>
-                <th className="text-left px-6 py-3 text-[11px] font-bold text-slate-400 uppercase tracking-widest">Status</th>
+                <SortableHeader label="No. Dok" sortKeyParam="doc_number" />
+                <SortableHeader label="Judul" sortKeyParam="title" />
+                <SortableHeader label="Rev" sortKeyParam="revision" />
+                <SortableHeader label="Tgl Efektif" sortKeyParam="effective_date" />
+                <SortableHeader label="Kategori" sortKeyParam="category_name" />
+                <SortableHeader label="Dept" sortKeyParam="department_code" />
+                <SortableHeader label="Status" sortKeyParam="status" />
                 {isAdmin && <th className="text-right px-6 py-3 text-[11px] font-bold text-slate-400 uppercase tracking-widest">Aksi</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
-              {filtered.length === 0 && (
-                <tr><td colSpan={isAdmin ? 6 : 5} className="px-6 py-12 text-center text-slate-400 text-sm">Tidak ada dokumen ditemukan.</td></tr>
+              {processedDocs.length === 0 && (
+                <tr><td colSpan={isAdmin ? 8 : 7} className="px-6 py-12 text-center text-slate-400 text-sm">Tidak ada dokumen ditemukan.</td></tr>
               )}
-              {filtered.map(doc => (
+              {processedDocs.map(doc => (
                 <tr key={doc.id} className="hover:bg-slate-50 transition-colors">
                   <td className="px-6 py-4">
                     <span className="font-mono text-xs font-bold text-slate-700">{doc.doc_number}</span>
-                    <div className="text-[10px] text-slate-400 mt-0.5">Rev. {doc.revision}</div>
                   </td>
                   <td className="px-6 py-4 max-w-[240px]">
-                    <p className="font-medium text-slate-800 text-sm truncate">{doc.title}</p>
-                    <p className="text-[11px] text-slate-400 mt-0.5">{new Date(doc.effective_date).toLocaleDateString('id-ID')}</p>
+                    <p className="font-mono text-xs text-slate-700">{doc.title}</p>
+                  </td>
+                  <td className="px-6 py-4">
+                    <span className="font-mono text-xs text-slate-700">Rev. {doc.revision}</span>
+                  </td>
+                  <td className="px-6 py-4 max-w-[240px]">
+                    <p className="font-mono text-xs text-slate-700">{new Date(doc.effective_date).toLocaleDateString('id-ID')}</p>
                   </td>
                   <td className="px-6 py-4">
                     <p className="text-xs text-slate-500">{doc.category_name}</p>
@@ -226,10 +313,10 @@ export default function DocumentsClient({ documents, categories, departments, do
 
       {/* Card list — mobile */}
       <div className="sm:hidden space-y-2">
-        {filtered.length === 0 && (
+        {processedDocs.length === 0 && (
           <div className="bg-white border border-slate-200 rounded-2xl p-6 text-center text-slate-400 text-sm">Tidak ada dokumen ditemukan.</div>
         )}
-        {filtered.map(doc => (
+        {processedDocs.map(doc => (
           <div key={doc.id} className="bg-white border border-slate-200 rounded-2xl px-4 py-3 shadow-sm">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
