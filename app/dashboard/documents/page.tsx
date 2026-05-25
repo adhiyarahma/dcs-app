@@ -18,7 +18,8 @@ export default async function DocumentsPage() {
     .from('documents')
     .select(`
       id, doc_number, title, revision, effective_date, revision_date,
-      expiry_date, status, created_at, updated_at, category_id, type_id, department_id,
+      expiry_date, production_type, status, created_at, updated_at,
+      category_id, type_id, department_id,
       document_types!inner(name),
       categories!inner(name),
       departments(code, name),
@@ -35,6 +36,7 @@ export default async function DocumentsPage() {
     effective_date: d.effective_date,
     revision_date: d.revision_date,
     expiry_date: d.expiry_date,
+    production_type: d.production_type ?? null, 
     status: d.status,
     created_at: d.created_at,
     updated_at: d.updated_at,
@@ -49,7 +51,7 @@ export default async function DocumentsPage() {
   }));
 
   return (
-    <div className="max-w-6xl mx-auto py-6 px-4">
+    <div className="max-w-8xl mx-auto py-2 px-4">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-slate-800">Dokumen</h1>
         <p className="text-sm text-slate-400 mt-1">Kelola arsip dokumen perusahaan</p>

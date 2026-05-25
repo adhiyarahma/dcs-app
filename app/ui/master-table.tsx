@@ -1,10 +1,12 @@
 'use client';
 
 import { useState } from 'react';
+import clsx from 'clsx';
 import {
   MagnifyingGlassIcon, PlusIcon, PencilIcon, TrashIcon,
   XMarkIcon, ExclamationTriangleIcon, FolderIcon,
   BuildingOfficeIcon, DocumentDuplicateIcon,
+  ChevronLeftIcon, ChevronRightIcon, FunnelIcon, ChevronDownIcon
 } from '@heroicons/react/24/outline';
 import {
   createCategory, updateCategory, deleteCategory,
@@ -13,6 +15,66 @@ import {
 
 type Item = { id: string; name: string; subtitle?: string; created_at?: string; };
 type TableType = 'category' | 'department';
+
+const PAGE_SIZE = 5;
+
+// ─── Pagination Component ─────────────────────────────────────────────────
+function Pagination({ currentPage, totalPages, onPageChange }: {
+  currentPage: number; totalPages: number; onPageChange: (p: number) => void;
+}) {
+  if (totalPages <= 1) return null;
+
+  const pages: (number | '...')[] = [];
+  if (totalPages <= 7) {
+    for (let i = 1; i <= totalPages; i++) pages.push(i);
+  } else {
+    pages.push(1);
+    if (currentPage > 3) pages.push('...');
+    for (let i = Math.max(2, currentPage - 1); i <= Math.min(totalPages - 1, currentPage + 1); i++) pages.push(i);
+    if (currentPage < totalPages - 2) pages.push('...');
+    pages.push(totalPages);
+  }
+
+  return (
+    <div className="flex items-center justify-between px-2 py-3 border-t border-slate-100">
+      <p className="text-xs text-slate-400">
+        Halaman <span className="font-semibold text-slate-600">{currentPage}</span> dari <span className="font-semibold text-slate-600">{totalPages}</span>
+      </p>
+      <div className="flex items-center gap-1">
+        <button
+          onClick={() => onPageChange(currentPage - 1)}
+          disabled={currentPage === 1}
+          className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+        >
+          <ChevronLeftIcon className="w-4 h-4" />
+        </button>
+        {pages.map((p, i) =>
+          p === '...'
+            ? <span key={`dot-${i}`} className="px-2 text-slate-300 text-xs">...</span>
+            : <button
+                key={p}
+                onClick={() => onPageChange(p as number)}
+                className={clsx(
+                  'min-w-[28px] h-7 px-1.5 rounded-lg text-xs font-medium transition-all',
+                  p === currentPage
+                    ? 'bg-slate-900 text-white'
+                    : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700'
+                )}
+              >
+                {p}
+              </button>
+        )}
+        <button
+          onClick={() => onPageChange(currentPage + 1)}
+          disabled={currentPage === totalPages}
+          className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+        >
+          <ChevronRightIcon className="w-4 h-4" />
+        </button>
+      </div>
+    </div>
+  );
+}
 
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
   return (
@@ -59,6 +121,8 @@ function DeleteModal({ item, onConfirm, onCancel, loading }: {
 
 export default function MasterTable({ type, items }: { type: TableType; items: Item[] }) {
   const [search, setSearch] = useState('');
+  const [filterSort, setFilterSort] = useState(''); // State untuk filter urutan
+  const [currentPage, setCurrentPage] = useState(1);
   const [showCreate, setShowCreate] = useState(false);
   const [editItem, setEditItem] = useState<Item | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Item | null>(null);
@@ -69,10 +133,21 @@ export default function MasterTable({ type, items }: { type: TableType; items: I
   const label = isCategory ? 'Kategori' : 'Departemen';
   const Icon = isCategory ? FolderIcon : BuildingOfficeIcon;
 
-  const filtered = items.filter(i =>
+  // ─── FILTER & SORTING LOGIC ──────────────────────────────────────────────
+  let processedItems = items.filter(i =>
     i.name.toLowerCase().includes(search.toLowerCase()) ||
     (i.subtitle?.toLowerCase().includes(search.toLowerCase()) ?? false)
   );
+
+  if (filterSort === 'asc') {
+    processedItems.sort((a, b) => a.name.localeCompare(b.name));
+  } else if (filterSort === 'desc') {
+    processedItems.sort((a, b) => b.name.localeCompare(a.name));
+  }
+
+  // ─── PAGINATION LOGIC ────────────────────────────────────────────────────
+  const totalPages = Math.ceil(processedItems.length / PAGE_SIZE);
+  const paginatedItems = processedItems.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   async function handleCreate(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -158,19 +233,50 @@ export default function MasterTable({ type, items }: { type: TableType; items: I
         </div>
       </div>
 
-      {/* Toolbar */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-        <div className="relative flex-1">
-          <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-          <input type="text" placeholder={`Cari ${label.toLowerCase()}...`}
-            className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all"
-            onChange={(e) => setSearch(e.target.value)} />
+      {/* Toolbar dengan Filter */}
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+          <div className="relative flex-1">
+            <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <input type="text" placeholder={`Cari ${label.toLowerCase()}...`}
+              className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all"
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setCurrentPage(1); // Reset halaman saat mencari
+              }} />
+          </div>
+          <button onClick={() => { setShowCreate(true); setEditItem(null); setError(''); }}
+            className="flex items-center justify-center gap-2 bg-slate-900 text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:bg-slate-800 transition-all active:scale-95 shrink-0">
+            <PlusIcon className="w-4 h-4" />
+            Tambah {label}
+          </button>
         </div>
-        <button onClick={() => { setShowCreate(true); setEditItem(null); setError(''); }}
-          className="flex items-center justify-center gap-2 bg-slate-900 text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:bg-slate-800 transition-all active:scale-95 shrink-0">
-          <PlusIcon className="w-4 h-4" />
-          Tambah {label}
-        </button>
+
+        {/* Dropdown Filter */}
+        <div className="flex flex-wrap gap-2 items-center">
+          <div className="relative">
+            <FunnelIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+            <select
+              value={filterSort}
+              onChange={e => { setFilterSort(e.target.value); setCurrentPage(1); }}
+              className="pl-8 pr-8 py-2 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-600 outline-none focus:border-blue-500 transition-all appearance-none cursor-pointer"
+            >
+              <option value="">Urutan Default</option>
+              <option value="asc">Nama (A - Z)</option>
+              <option value="desc">Nama (Z - A)</option>
+            </select>
+            <ChevronDownIcon className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400 pointer-events-none" />
+          </div>
+
+          {filterSort && (
+            <button
+              onClick={() => { setFilterSort(''); setCurrentPage(1); }}
+              className="px-3 py-2 text-xs font-medium text-slate-500 hover:text-red-600 border border-slate-200 rounded-xl hover:border-red-200 hover:bg-red-50 transition-all"
+            >
+              Reset filter
+            </button>
+          )}
+        </div>
       </div>
 
       {error && !showCreate && !editItem && (
@@ -190,10 +296,10 @@ export default function MasterTable({ type, items }: { type: TableType; items: I
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
-              {filtered.length === 0 && (
+              {paginatedItems.length === 0 && (
                 <tr><td colSpan={3} className="px-6 py-10 text-center text-slate-400 text-sm">Tidak ada data ditemukan.</td></tr>
               )}
-              {filtered.map((item) => (
+              {paginatedItems.map((item) => (
                 <tr key={item.id} className="hover:bg-slate-50 transition-colors">
                   {!isCategory && (
                     <td className="px-6 py-4">
@@ -223,14 +329,16 @@ export default function MasterTable({ type, items }: { type: TableType; items: I
             </tbody>
           </table>
         </div>
+        {/* Render Pagination Desktop */}
+        <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} />
       </div>
 
       {/* Card list — mobile */}
       <div className="sm:hidden space-y-2">
-        {filtered.length === 0 && (
+        {paginatedItems.length === 0 && (
           <div className="bg-white border border-slate-200 rounded-2xl p-6 text-center text-slate-400 text-sm">Tidak ada data ditemukan.</div>
         )}
-        {filtered.map((item) => (
+        {paginatedItems.map((item) => (
           <div key={item.id} className="bg-white border border-slate-200 rounded-2xl px-4 py-3 flex items-center justify-between gap-3 shadow-sm">
             <div className="min-w-0">
               {!isCategory && item.subtitle && (
@@ -255,6 +363,10 @@ export default function MasterTable({ type, items }: { type: TableType; items: I
             </div>
           </div>
         ))}
+        {/* Render Pagination Mobile */}
+        <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden mt-3">
+          <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} />
+        </div>
       </div>
 
       {/* Modal Tambah */}

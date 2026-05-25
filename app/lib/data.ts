@@ -68,7 +68,8 @@ export async function getDocumentsByCategory(categoryId: string) {
     .from('documents')
     .select(`
       id, doc_number, title, revision, effective_date, revision_date,
-      expiry_date, status, created_at, updated_at, category_id, type_id, department_id,
+      expiry_date, production_type, status, created_at, updated_at,
+      category_id, type_id, department_id,
       document_types!inner(name),
       departments(code, name),
       users(name)
@@ -139,7 +140,7 @@ export async function getDocumentById(id: string) {
     .select(`
       id, doc_number, title, revision, status,
       category_id, type_id, department_id,
-      effective_date, revision_date, expiry_date,
+      effective_date, revision_date, expiry_date, production_type,
       parent_id, uploaded_by,
       document_types!inner(name),
       categories!inner(name),
@@ -187,4 +188,3 @@ export async function fetchDeletedDocuments() {
     throw new Error('Gagal mengambil data trash.');
   }
 }
-
