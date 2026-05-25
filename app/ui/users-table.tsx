@@ -5,10 +5,72 @@ import clsx from 'clsx';
 import {
   MagnifyingGlassIcon, UserPlusIcon, PencilIcon, TrashIcon,
   XMarkIcon, ExclamationTriangleIcon, KeyIcon, UsersIcon,
+  EyeIcon, ChevronLeftIcon, ChevronRightIcon,
+  FunnelIcon, ChevronDownIcon // <-- Tambahan icon untuk filter
 } from '@heroicons/react/24/outline';
 import { createUser, updateUser, deleteUser, resetPassword } from '@/app/lib/actions';
 
 type User = { id: string; name: string; email: string; role: 'admin' | 'viewer'; created_at: string; };
+
+const PAGE_SIZE = 5;
+
+// ─── Pagination Component ─────────────────────────────────────────────────
+function Pagination({ currentPage, totalPages, onPageChange }: {
+  currentPage: number; totalPages: number; onPageChange: (p: number) => void;
+}) {
+  if (totalPages <= 1) return null;
+
+  const pages: (number | '...')[] = [];
+  if (totalPages <= 7) {
+    for (let i = 1; i <= totalPages; i++) pages.push(i);
+  } else {
+    pages.push(1);
+    if (currentPage > 3) pages.push('...');
+    for (let i = Math.max(2, currentPage - 1); i <= Math.min(totalPages - 1, currentPage + 1); i++) pages.push(i);
+    if (currentPage < totalPages - 2) pages.push('...');
+    pages.push(totalPages);
+  }
+
+  return (
+    <div className="flex items-center justify-between px-2 py-3 border-t border-slate-100">
+      <p className="text-xs text-slate-400">
+        Halaman <span className="font-semibold text-slate-600">{currentPage}</span> dari <span className="font-semibold text-slate-600">{totalPages}</span>
+      </p>
+      <div className="flex items-center gap-1">
+        <button
+          onClick={() => onPageChange(currentPage - 1)}
+          disabled={currentPage === 1}
+          className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+        >
+          <ChevronLeftIcon className="w-4 h-4" />
+        </button>
+        {pages.map((p, i) =>
+          p === '...'
+            ? <span key={`dot-${i}`} className="px-2 text-slate-300 text-xs">...</span>
+            : <button
+                key={p}
+                onClick={() => onPageChange(p as number)}
+                className={clsx(
+                  'min-w-[28px] h-7 px-1.5 rounded-lg text-xs font-medium transition-all',
+                  p === currentPage
+                    ? 'bg-slate-900 text-white'
+                    : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700'
+                )}
+              >
+                {p}
+              </button>
+        )}
+        <button
+          onClick={() => onPageChange(currentPage + 1)}
+          disabled={currentPage === totalPages}
+          className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+        >
+          <ChevronRightIcon className="w-4 h-4" />
+        </button>
+      </div>
+    </div>
+  );
+}
 
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
   return (
@@ -128,6 +190,8 @@ function ResetPasswordForm({ onSubmit, onCancel, loading, error }: {
 
 export default function UsersTable({ users, currentUserId }: { users: User[]; currentUserId: string }) {
   const [searchTerm, setSearchTerm] = useState('');
+  const [filterRole, setFilterRole] = useState(''); // <-- State untuk filter role
+  const [currentPage, setCurrentPage] = useState(1);
   const [showCreate, setShowCreate] = useState(false);
   const [editUser, setEditUser] = useState<User | null>(null);
   const [resetUser, setResetUser] = useState<User | null>(null);
@@ -135,10 +199,20 @@ export default function UsersTable({ users, currentUserId }: { users: User[]; cu
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const filtered = users.filter(u =>
-    u.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    u.email.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const totalViewers = users.filter(user => user.role === 'viewer').length;
+  const totalAdmins = users.filter(user => user.role === 'admin').length;
+
+  // ─── FILTERING LOGIC ──────────────────────────────────────────────────────
+  const filtered = users.filter(u => {
+    const matchSearch = u.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                        u.email.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchRole = filterRole === '' || u.role === filterRole;
+    return matchSearch && matchRole;
+  });
+
+  // ─── PAGINATION LOGIC ─────────────────────────────────────────────────────
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+  const paginatedUsers = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   async function handleCreate(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault(); setLoading(true); setError('');
@@ -172,30 +246,83 @@ export default function UsersTable({ users, currentUserId }: { users: User[]; cu
 
   return (
     <div className="space-y-5">
-      {/* Stat card */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-4 flex items-center gap-4 shadow-sm">
-        <div className="p-3 bg-blue-50 rounded-xl text-blue-600 shrink-0">
-          <UsersIcon className="w-6 h-6" />
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        
+        <div className="bg-white border border-slate-200 rounded-2xl p-4 flex items-center gap-4 shadow-sm">
+          <div className="p-3 bg-blue-50 rounded-xl text-blue-600 shrink-0">
+            <UsersIcon className="w-6 h-6" />
+          </div>
+          <div>
+            <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">Total Pengguna</p>
+            <p className="text-2xl font-bold text-slate-900">{users.length}</p>
+          </div>
         </div>
-        <div>
-          <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">Total Pengguna</p>
-          <p className="text-2xl font-bold text-slate-900">{users.length}</p>
+
+        <div className="bg-white border border-slate-200 rounded-2xl p-4 flex items-center gap-4 shadow-sm">
+          <div className="p-3 bg-emerald-50 rounded-xl text-emerald-600 shrink-0">
+            <EyeIcon className="w-6 h-6" />
+          </div>
+          <div>
+            <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">Viewer</p>
+            <p className="text-2xl font-bold text-slate-900">{totalViewers}</p>
+          </div>
+        </div>
+
+        <div className="bg-white border border-slate-200 rounded-2xl p-4 flex items-center gap-4 shadow-sm">
+          <div className="p-3 bg-purple-50 rounded-xl text-purple-600 shrink-0">
+            <KeyIcon className="w-6 h-6" />
+          </div>
+          <div>
+            <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">Admin</p>
+            <p className="text-2xl font-bold text-slate-900">{totalAdmins}</p>
+          </div>
         </div>
       </div>
 
-      {/* Toolbar */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-        <div className="relative flex-1">
-          <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-          <input type="text" placeholder="Cari pengguna..."
-            className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all"
-            onChange={(e) => setSearchTerm(e.target.value)} />
+      {/* Toolbar dengan Search dan Filter */}
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+          <div className="relative flex-1">
+            <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <input type="text" placeholder="Cari pengguna..."
+              className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all"
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setCurrentPage(1);
+              }} />
+          </div>
+          <button onClick={() => { setShowCreate(true); setEditUser(null); setError(''); }}
+            className="flex items-center justify-center gap-2 bg-slate-900 text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:bg-slate-800 transition-all active:scale-95 shrink-0">
+            <UserPlusIcon className="w-4 h-4" />
+            Tambah Pengguna
+          </button>
         </div>
-        <button onClick={() => { setShowCreate(true); setEditUser(null); setError(''); }}
-          className="flex items-center justify-center gap-2 bg-slate-900 text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:bg-slate-800 transition-all active:scale-95 shrink-0">
-          <UserPlusIcon className="w-4 h-4" />
-          Tambah Pengguna
-        </button>
+
+        {/* Baris Filter Role */}
+        <div className="flex flex-wrap gap-2 items-center">
+          <div className="relative">
+            <FunnelIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+            <select
+              value={filterRole}
+              onChange={e => { setFilterRole(e.target.value); setCurrentPage(1); }}
+              className="pl-8 pr-8 py-2 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-600 outline-none focus:border-blue-500 transition-all appearance-none cursor-pointer"
+            >
+              <option value="">Semua Role</option>
+              <option value="admin">Admin</option>
+              <option value="viewer">Viewer</option>
+            </select>
+            <ChevronDownIcon className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400 pointer-events-none" />
+          </div>
+
+          {filterRole && (
+            <button
+              onClick={() => { setFilterRole(''); setCurrentPage(1); }}
+              className="px-3 py-2 text-xs font-medium text-slate-500 hover:text-red-600 border border-slate-200 rounded-xl hover:border-red-200 hover:bg-red-50 transition-all"
+            >
+              Reset filter
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Table — desktop */}
@@ -211,10 +338,10 @@ export default function UsersTable({ users, currentUserId }: { users: User[]; cu
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
-              {filtered.length === 0 && (
+              {paginatedUsers.length === 0 && (
                 <tr><td colSpan={4} className="px-6 py-10 text-center text-slate-400 text-sm">Tidak ada pengguna ditemukan.</td></tr>
               )}
-              {filtered.map((user) => {
+              {paginatedUsers.map((user) => {
                 const isSelf = user.id === currentUserId;
                 return (
                   <tr key={user.id} className="hover:bg-slate-50 transition-colors group">
@@ -261,14 +388,15 @@ export default function UsersTable({ users, currentUserId }: { users: User[]; cu
             </tbody>
           </table>
         </div>
+        <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} />
       </div>
 
       {/* Card list — mobile */}
       <div className="sm:hidden space-y-2">
-        {filtered.length === 0 && (
+        {paginatedUsers.length === 0 && (
           <div className="bg-white border border-slate-200 rounded-2xl p-6 text-center text-slate-400 text-sm">Tidak ada pengguna ditemukan.</div>
         )}
-        {filtered.map((user) => {
+        {paginatedUsers.map((user) => {
           const isSelf = user.id === currentUserId;
           return (
             <div key={user.id} className="bg-white border border-slate-200 rounded-2xl px-4 py-3 shadow-sm">
@@ -304,6 +432,11 @@ export default function UsersTable({ users, currentUserId }: { users: User[]; cu
             </div>
           );
         })}
+        
+        {/* Mobile pagination */}
+        <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden mt-3">
+          <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} />
+        </div>
       </div>
 
       {showCreate && (
