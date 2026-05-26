@@ -1,28 +1,43 @@
-'use client';
+"use client";
 
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { useState } from 'react';
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { useState } from "react";
 import {
-  HomeIcon, UsersIcon, CircleStackIcon, ChevronDownIcon, ChevronRightIcon, DocumentTextIcon,
-  TagIcon, DocumentDuplicateIcon, BuildingOfficeIcon,
-} from '@heroicons/react/24/outline';
-import { signOut } from 'next-auth/react';
-import clsx from 'clsx';
+  HomeIcon,
+  UsersIcon,
+  CircleStackIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
+  DocumentTextIcon,
+  TagIcon,
+  DocumentDuplicateIcon,
+  BuildingOfficeIcon,
+} from "@heroicons/react/24/outline";
+import { signOut } from "next-auth/react";
+import clsx from "clsx";
 
 const masterItems = [
-  { href: '/dashboard/master/categories', label: 'Kategori', icon: TagIcon },
-  { href: '/dashboard/master/document-types', label: 'Jenis Dokumen', icon: DocumentDuplicateIcon },
-  { href: '/dashboard/master/departments', label: 'Departemen', icon: BuildingOfficeIcon },
+  { href: "/dashboard/master/categories", label: "Kategori", icon: TagIcon },
+  {
+    href: "/dashboard/master/document-types",
+    label: "Jenis Dokumen",
+    icon: DocumentDuplicateIcon,
+  },
+  {
+    href: "/dashboard/master/departments",
+    label: "Departemen",
+    icon: BuildingOfficeIcon,
+  },
 ];
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const isMasterActive = pathname.startsWith('/dashboard/master');
+  const isMasterActive = pathname.startsWith("/dashboard/master");
   const [masterOpen, setMasterOpen] = useState(isMasterActive);
 
   return (
-    <aside className="w-64 min-h-screen bg-[#0f172a] text-white flex flex-col">
+    <aside className="w-64 h-full bg-[#0f172a] text-white flex flex-col overflow-y-auto">
       <div className="px-6 py-6 border-b border-white/10">
         <h1 className="text-xl font-bold">DCS App</h1>
         <p className="text-white/40 text-xs mt-1">Document Control System</p>
@@ -30,19 +45,29 @@ export default function Sidebar() {
 
       <nav className="flex-1 px-4 py-4 space-y-1">
         {/* Dashboard */}
-        <Link href="/dashboard"
-          className={clsx('flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
-            pathname === '/dashboard' ? 'bg-blue-600 text-white' : 'text-white/60 hover:bg-white/10 hover:text-white'
-          )}>
+        <Link
+          href="/dashboard"
+          className={clsx(
+            "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
+            pathname === "/dashboard"
+              ? "bg-blue-600 text-white"
+              : "text-white/60 hover:bg-white/10 hover:text-white"
+          )}
+        >
           <HomeIcon className="w-5 h-5" />
           Dashboard
         </Link>
 
         {/* Dokumen */}
-        <Link href="/dashboard/documents"
-          className={clsx('flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
-            pathname.startsWith('/dashboard/documents') ? 'bg-blue-600 text-white' : 'text-white/60 hover:bg-white/10 hover:text-white'
-          )}>
+        <Link
+          href="/dashboard/documents"
+          className={clsx(
+            "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
+            pathname.startsWith("/dashboard/documents")
+              ? "bg-blue-600 text-white"
+              : "text-white/60 hover:bg-white/10 hover:text-white"
+          )}
+        >
           <DocumentTextIcon className="w-5 h-5" />
           Dokumen
         </Link>
@@ -51,16 +76,22 @@ export default function Sidebar() {
         <div>
           <button
             onClick={() => setMasterOpen(!masterOpen)}
-            className={clsx('w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-colors',
-              isMasterActive ? 'bg-white/10 text-white' : 'text-white/60 hover:bg-white/10 hover:text-white'
-            )}>
+            className={clsx(
+              "w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-colors",
+              isMasterActive
+                ? "bg-white/10 text-white"
+                : "text-white/60 hover:bg-white/10 hover:text-white"
+            )}
+          >
             <div className="flex items-center gap-3">
               <CircleStackIcon className="w-5 h-5" />
               Master Data
             </div>
-            {masterOpen
-              ? <ChevronDownIcon className="w-4 h-4" />
-              : <ChevronRightIcon className="w-4 h-4" />}
+            {masterOpen ? (
+              <ChevronDownIcon className="w-4 h-4" />
+            ) : (
+              <ChevronRightIcon className="w-4 h-4" />
+            )}
           </button>
 
           {masterOpen && (
@@ -68,10 +99,16 @@ export default function Sidebar() {
               {masterItems.map((item) => {
                 const Icon = item.icon;
                 return (
-                  <Link key={item.href} href={item.href}
-                    className={clsx('flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
-                      pathname === item.href ? 'bg-blue-600 text-white' : 'text-white/50 hover:bg-white/10 hover:text-white'
-                    )}>
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={clsx(
+                      "flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
+                      pathname === item.href
+                        ? "bg-blue-600 text-white"
+                        : "text-white/50 hover:bg-white/10 hover:text-white"
+                    )}
+                  >
                     <Icon className="w-4 h-4" />
                     {item.label}
                   </Link>
@@ -82,10 +119,15 @@ export default function Sidebar() {
         </div>
 
         {/* Pengguna */}
-        <Link href="/dashboard/users"
-          className={clsx('flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
-            pathname.startsWith('/dashboard/users') ? 'bg-blue-600 text-white' : 'text-white/60 hover:bg-white/10 hover:text-white'
-          )}>
+        <Link
+          href="/dashboard/users"
+          className={clsx(
+            "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
+            pathname.startsWith("/dashboard/users")
+              ? "bg-blue-600 text-white"
+              : "text-white/60 hover:bg-white/10 hover:text-white"
+          )}
+        >
           <UsersIcon className="w-5 h-5" />
           Pengguna
         </Link>
@@ -93,7 +135,7 @@ export default function Sidebar() {
 
       <div className="px-4 py-4 border-t border-white/10">
         <button
-          onClick={() => signOut({ callbackUrl: '/login' })}
+          onClick={() => signOut({ callbackUrl: "/login" })}
           className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-white/50 hover:bg-white/10 hover:text-white transition-colors"
         >
           <span>→</span>

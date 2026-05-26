@@ -1,15 +1,15 @@
 // app/ui/trash-table.tsx
-'use client';
+"use client";
 
-import { useTransition } from 'react';
-import { restoreDocument } from '@/app/lib/actions';
-import { ArrowUturnLeftIcon } from '@heroicons/react/24/outline';
+import { useTransition } from "react";
+import { restoreDocument } from "@/app/lib/actions";
+import { ArrowUturnLeftIcon } from "@heroicons/react/24/outline";
 
 export default function TrashTable({ documents }: { documents: any[] }) {
   const [isPending, startTransition] = useTransition();
 
   const handleRestore = (id: string) => {
-    if (confirm('Apakah kamu yakin ingin memulihkan dokumen ini?')) {
+    if (confirm("Apakah kamu yakin ingin memulihkan dokumen ini?")) {
       startTransition(async () => {
         const result = await restoreDocument(id);
         if (result?.error) {
@@ -20,7 +20,11 @@ export default function TrashTable({ documents }: { documents: any[] }) {
   };
 
   if (documents.length === 0) {
-    return <p className="text-slate-500 mt-4">Tidak ada dokumen di keranjang sampah.</p>;
+    return (
+      <p className="text-slate-500 mt-4">
+        Tidak ada dokumen di keranjang sampah.
+      </p>
+    );
   }
 
   return (
@@ -42,7 +46,7 @@ export default function TrashTable({ documents }: { documents: any[] }) {
               <td className="px-4 py-3">{doc.title}</td>
               <td className="px-4 py-3">{doc.revision}</td>
               <td className="px-4 py-3">
-                {new Date(doc.updated_at).toLocaleDateString('id-ID')}
+                {new Date(doc.updated_at).toLocaleDateString("id-ID")}
               </td>
               <td className="px-4 py-3 text-right">
                 <button

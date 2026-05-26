@@ -1,9 +1,9 @@
-'use client';
+"use client";
 
-import { useState, useTransition } from 'react';
-import { useRouter } from 'next/navigation';
-import { createDocument } from '@/app/lib/actions';
-import ImportDocumentModal from '@/app/ui/ImportDocumentModal';
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { createDocument } from "@/app/lib/actions";
+import ImportDocumentModal from "@/app/ui/ImportDocumentModal";
 
 type Category = { id: string; name: string };
 type Department = { id: string; code: string; name: string };
@@ -17,9 +17,9 @@ interface Props {
 }
 
 function getFieldConfig(categoryName: string, typeName: string) {
-  const isMSDS = categoryName.toLowerCase().includes('msds');
-  const isMSDSKimia = isMSDS && typeName.toLowerCase().includes('kimia');
-  const isMSDSBenang = isMSDS && typeName.toLowerCase().includes('benang');
+  const isMSDS = categoryName.toLowerCase().includes("msds");
+  const isMSDSKimia = isMSDS && typeName.toLowerCase().includes("kimia");
+  const isMSDSBenang = isMSDS && typeName.toLowerCase().includes("benang");
 
   return {
     showDepartment: !isMSDS,
@@ -30,9 +30,9 @@ function getFieldConfig(categoryName: string, typeName: string) {
 }
 
 const PRODUCTION_TYPE_OPTIONS = [
-  { value: 'production', label: 'Production' },
-  { value: 'non-production', label: 'Non-Production' },
-  { value: 'production bahan baku', label: 'Production Bahan Baku' },
+  { value: "production", label: "Production" },
+  { value: "non-production", label: "Non-Production" },
+  { value: "production bahan baku", label: "Production Bahan Baku" },
 ] as const;
 
 export default function CreateDocumentClient({
@@ -44,22 +44,24 @@ export default function CreateDocumentClient({
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const [selectedCategoryId, setSelectedCategoryId] = useState('');
-  const [selectedTypeId, setSelectedTypeId] = useState('');
+  const [selectedCategoryId, setSelectedCategoryId] = useState("");
+  const [selectedTypeId, setSelectedTypeId] = useState("");
   const [showImport, setShowImport] = useState(false); // ✅ dipindah ke dalam komponen
 
-  const filteredTypes = documentTypes.filter(t => t.category_id === selectedCategoryId);
-  const selectedCategory = categories.find(c => c.id === selectedCategoryId);
-  const selectedType = documentTypes.find(t => t.id === selectedTypeId);
+  const filteredTypes = documentTypes.filter(
+    (t) => t.category_id === selectedCategoryId
+  );
+  const selectedCategory = categories.find((c) => c.id === selectedCategoryId);
+  const selectedType = documentTypes.find((t) => t.id === selectedTypeId);
 
   const fieldConfig = getFieldConfig(
-    selectedCategory?.name ?? '',
-    selectedType?.name ?? '',
+    selectedCategory?.name ?? "",
+    selectedType?.name ?? ""
   );
 
   function handleCategoryChange(e: React.ChangeEvent<HTMLSelectElement>) {
     setSelectedCategoryId(e.target.value);
-    setSelectedTypeId('');
+    setSelectedTypeId("");
   }
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -73,7 +75,7 @@ export default function CreateDocumentClient({
         setError(result.error);
         return;
       }
-      router.push('/dashboard/documents');
+      router.push("/dashboard/documents");
     });
   }
 
@@ -86,8 +88,18 @@ export default function CreateDocumentClient({
           onClick={() => setShowImport(true)}
           className="px-4 py-2.5 text-sm font-medium border border-slate-300 text-slate-600 rounded-lg hover:bg-slate-50 transition-all flex items-center gap-2"
         >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+          <svg
+            className="w-4 h-4"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
+            />
           </svg>
           Import Excel
         </button>
@@ -111,7 +123,7 @@ export default function CreateDocumentClient({
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1.5">
-              Revisi <span className="text-red-500">*</span>
+              Revisi
             </label>
             <input
               name="revision"
@@ -119,7 +131,6 @@ export default function CreateDocumentClient({
               min={0}
               max={8}
               defaultValue={0}
-              required
               className="w-full border border-slate-300 rounded-lg px-3.5 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 transition-all"
             />
           </div>
@@ -152,8 +163,10 @@ export default function CreateDocumentClient({
               className="w-full border border-slate-300 rounded-lg px-3.5 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 transition-all bg-white"
             >
               <option value="">Pilih Kategori</option>
-              {categories.map(c => (
-                <option key={c.id} value={c.id}>{c.name}</option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
               ))}
             </select>
           </div>
@@ -166,12 +179,14 @@ export default function CreateDocumentClient({
               required
               disabled={!selectedCategoryId}
               value={selectedTypeId}
-              onChange={e => setSelectedTypeId(e.target.value)}
+              onChange={(e) => setSelectedTypeId(e.target.value)}
               className="w-full border border-slate-300 rounded-lg px-3.5 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 transition-all bg-white disabled:bg-slate-50 disabled:text-slate-400"
             >
               <option value="">Pilih Jenis</option>
-              {filteredTypes.map(t => (
-                <option key={t.id} value={t.id}>{t.name}</option>
+              {filteredTypes.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
               ))}
             </select>
           </div>
@@ -189,8 +204,10 @@ export default function CreateDocumentClient({
               className="w-full border border-slate-300 rounded-lg px-3.5 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 transition-all bg-white"
             >
               <option value="">Pilih Departemen</option>
-              {departments.map(d => (
-                <option key={d.id} value={d.id}>[{d.code}] {d.name}</option>
+              {departments.map((d) => (
+                <option key={d.id} value={d.id}>
+                  [{d.code}] {d.name}
+                </option>
               ))}
             </select>
           </div>
@@ -208,29 +225,32 @@ export default function CreateDocumentClient({
               className="w-full border border-slate-300 rounded-lg px-3.5 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 transition-all bg-white"
             >
               <option value="">Pilih Production Type</option>
-              {PRODUCTION_TYPE_OPTIONS.map(opt => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              {PRODUCTION_TYPE_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
               ))}
             </select>
           </div>
         )}
 
         {/* Tanggal Efektif & kondisional */}
-        <div className={`grid grid-cols-1 gap-4 ${
-          fieldConfig.showRevisionDate && fieldConfig.showExpiryDate
-            ? 'sm:grid-cols-3'
-            : fieldConfig.showExpiryDate
-            ? 'sm:grid-cols-2'
-            : 'sm:grid-cols-1'
-        }`}>
+        <div
+          className={`grid grid-cols-1 gap-4 ${
+            fieldConfig.showRevisionDate && fieldConfig.showExpiryDate
+              ? "sm:grid-cols-3"
+              : fieldConfig.showExpiryDate
+              ? "sm:grid-cols-2"
+              : "sm:grid-cols-1"
+          }`}
+        >
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1.5">
-              Tgl Efektif <span className="text-red-500">*</span>
+              Tgl Efektif
             </label>
             <input
               name="effective_date"
               type="date"
-              required
               className="w-full border border-slate-300 rounded-lg px-3.5 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 transition-all"
             />
           </div>
@@ -252,12 +272,11 @@ export default function CreateDocumentClient({
           {fieldConfig.showExpiryDate && (
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                Masa Berlaku <span className="text-red-500">*</span>
+                Masa Berlaku
               </label>
               <input
                 name="expiry_date"
                 type="date"
-                required={fieldConfig.showExpiryDate}
                 className="w-full border border-slate-300 rounded-lg px-3.5 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 transition-all"
               />
             </div>
@@ -267,12 +286,14 @@ export default function CreateDocumentClient({
         {/* Info field dinamis */}
         {selectedCategoryId && selectedTypeId && (
           <div className="bg-blue-50 border border-blue-100 rounded-lg px-4 py-3 text-xs text-blue-600">
-            <span className="font-semibold">Field aktif untuk {selectedCategory?.name} › {selectedType?.name}:</span>{' '}
+            <span className="font-semibold">
+              Field aktif untuk {selectedCategory?.name} › {selectedType?.name}:
+            </span>{" "}
             Tgl Efektif
-            {fieldConfig.showRevisionDate && ', Tgl Revisi'}
-            {fieldConfig.showExpiryDate && ', Masa Berlaku'}
-            {fieldConfig.showProductionType && ', Production Type'}
-            {fieldConfig.showDepartment && ', PIC Departemen'}
+            {fieldConfig.showRevisionDate && ", Tgl Revisi"}
+            {fieldConfig.showExpiryDate && ", Masa Berlaku"}
+            {fieldConfig.showProductionType && ", Production Type"}
+            {fieldConfig.showDepartment && ", PIC Departemen"}
           </div>
         )}
 
@@ -296,7 +317,7 @@ export default function CreateDocumentClient({
             disabled={isPending}
             className="px-5 py-2.5 text-sm font-bold bg-slate-900 text-white rounded-lg hover:bg-slate-800 disabled:opacity-50 transition-all"
           >
-            {isPending ? 'Menyimpan...' : 'Simpan Dokumen'}
+            {isPending ? "Menyimpan..." : "Simpan Dokumen"}
           </button>
         </div>
       </form>
@@ -308,7 +329,7 @@ export default function CreateDocumentClient({
           documentTypes={documentTypes}
           uploadedBy={userId}
           onClose={() => setShowImport(false)}
-          onSuccess={() => router.push('/dashboard/documents')}
+          onSuccess={() => router.push("/dashboard/documents")}
         />
       )}
     </>
