@@ -375,3 +375,26 @@ export async function getActiveDocuments() {
     dept_code: d.departments?.code ?? "",
   }));
 }
+
+export async function getNextFormNumber(): Promise<string> {
+  const now = new Date();
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  const yy = String(now.getFullYear()).slice(-2);
+  const startOfMonth = `${now.getFullYear()}-${mm}-01`;
+  const startOfNext =
+    now.getMonth() === 11
+      ? `${now.getFullYear() + 1}-01-01`
+      : `${now.getFullYear()}-${String(now.getMonth() + 2).padStart(
+          2,
+          "0"
+        )}-01`;
+
+  const { count } = await supabaseAdmin
+    .from("distributions")
+    .select("*", { count: "exact", head: true })
+    .gte("created_at", startOfMonth)
+    .lt("created_at", startOfNext);
+
+  const nextNum = String((count ?? 0) + 1).padStart(3, "0");
+  return `${nextNum}/MRP/${mm}/${yy}`;
+}

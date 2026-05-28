@@ -5,17 +5,20 @@ import {
   getDepartments,
   getActiveDocuments,
 } from "@/app/lib/data";
+import { fetchNextFormNumber } from "@/app/lib/actions";
 import DistributionsTable from "@/app/ui/distributions-table";
 
 export default async function DistributionsPage() {
   const session = await auth();
   if ((session?.user as any)?.role !== "admin") redirect("/dashboard");
 
-  const [distributions, departments, docOptions] = await Promise.all([
-    getDistributions(),
-    getDepartments(),
-    getActiveDocuments(),
-  ]);
+  const [distributions, departments, docOptions, initialFormNumber] =
+    await Promise.all([
+      getDistributions(),
+      getDepartments(),
+      getActiveDocuments(),
+      fetchNextFormNumber(),
+    ]);
 
   const currentUserId = (session?.user as any)?.id ?? "";
 
@@ -34,6 +37,7 @@ export default async function DistributionsPage() {
         departments={departments}
         docOptions={docOptions}
         currentUserId={currentUserId}
+        initialFormNumber={initialFormNumber}
       />
     </div>
   );
