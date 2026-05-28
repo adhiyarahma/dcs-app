@@ -45,9 +45,21 @@ export async function getDocumentTypes() {
 export async function getDepartments() {
   const { data } = await supabaseAdmin
     .from("departments")
-    .select("id, code, name")
+    .select(
+      `
+      id, 
+      code, 
+      name,
+      department_heads(name, title) // Pastikan nama kolomnya benar: 'name' dan 'title'
+    `
+    )
     .order("code");
-  return data ?? [];
+
+  return (data ?? []).map((d: any) => ({
+    ...d,
+    // Kita simpan hasil join sebagai array 'heads'
+    heads: d.department_heads ?? [],
+  }));
 }
 
 // ============================================================
@@ -197,27 +209,169 @@ export async function getDocumentById(id: string) {
   };
 }
 
+// Ganti fungsi fetchDeletedDocuments di data.ts
 export async function fetchDeletedDocuments() {
-  try {
+  const PAGE = 1000;
+  let allData: any[] = [];
+  let from = 0;
+
+  while (true) {
     const { data, error } = await supabaseAdmin
       .from("documents")
       .select(
         `
-        id,
-        doc_number,
-        title,
-        revision,
-        updated_at,
-        users ( name )
+        id, doc_number, title, revision, updated_at, category_id, type_id,
+        categories!inner(name),
+        document_types!inner(name),
+        departments(code),
+        users(name)
       `
       )
       .eq("status", "dihapus")
-      .order("updated_at", { ascending: false });
+      .order("updated_at", { ascending: false })
+      .range(from, from + PAGE - 1);
 
     if (error) throw new Error("Gagal mengambil data trash.");
-    return data;
-  } catch (error) {
-    console.error("Database Error:", error);
-    throw new Error("Gagal mengambil data trash.");
+    if (!data || data.length === 0) break;
+    allData = [...allData, ...data];
+    if (data.length < PAGE) break;
+    from += PAGE;
   }
+
+  return allData.map((d: any) => ({
+    id: d.id,
+    doc_number: d.doc_number,
+    title: d.title,
+    revision: d.revision,
+    updated_at: d.updated_at,
+    category_id: d.category_id,
+    type_id: d.type_id,
+    category_name: d.categories?.name ?? "",
+    type_name: d.document_types?.name ?? "",
+    department_code: d.departments?.code ?? "",
+    uploaded_by_name: d.users?.name ?? "",
+  }));
+}
+
+// ============================================================
+// DISTRIBUTIONS
+// ============================================================
+
+export async function getDistributions() {
+  const { data } = await supabaseAdmin
+    .from("distributions")
+    .select(
+      `
+      id, form_number, distributed_date, notes, created_at,
+      departments!distributions_handed_by_dept_id_fkey(
+        id, code, name, department_heads(name, title)
+      ),
+      users(name),
+      distribution_items(
+        id, quantity,
+        documents(id, doc_number, title, revision)
+      ),
+      distribution_recipients(
+        id,
+        departments(id, code, name, department_heads(name, title))
+      )
+    `
+    )
+    .order("created_at", { ascending: false });
+
+  return (data ?? []).map((d: any) => ({
+    id: d.id,
+    form_number: d.form_number,
+    distributed_date: d.distributed_date,
+    notes: d.notes,
+    created_at: d.created_at,
+    handed_by_dept: d.departments
+      ? {
+          ...d.departments,
+          heads: d.departments.department_heads,
+        }
+      : null,
+    created_by_name: d.users?.name ?? "",
+    items: (d.distribution_items ?? []).map((item: any) => ({
+      id: item.id,
+      quantity: item.quantity,
+      document: item.documents ?? null,
+    })),
+    recipients: (d.distribution_recipients ?? []).map((r: any) => ({
+      id: r.id,
+      dept: r.departments ?? null,
+    })),
+  }));
+}
+
+export async function getDistributionById(id: string) {
+  const { data } = await supabaseAdmin
+    .from("distributions")
+    .select(
+      `
+      id, form_number, distributed_date, handed_by_dept_id, notes, created_at,
+      departments!distributions_handed_by_dept_id_fkey(
+        id, code, name, 
+        department_heads(name, title)
+      ),
+      users(name),
+      distribution_items(
+        id, quantity,
+        documents(id, doc_number, title, revision)
+      ),
+      distribution_recipients(
+        id, dept_id,
+        departments(id, code, name, department_heads(name, title))
+      )
+    `
+    )
+    .eq("id", id)
+    .single();
+
+  if (!data) return null;
+
+  return {
+    id: data.id,
+    form_number: data.form_number,
+    distributed_date: data.distributed_date,
+    handed_by_dept_id: data.handed_by_dept_id,
+    notes: data.notes,
+    created_at: data.created_at,
+    handed_by_dept: (data as any).departments ?? null,
+    created_by_name: (data as any).users?.name ?? "",
+    items: ((data as any).distribution_items ?? []).map((item: any) => ({
+      id: item.id,
+      quantity: item.quantity,
+      document: item.documents ?? null,
+    })),
+    recipients: ((data as any).distribution_recipients ?? []).map((r: any) => ({
+      id: r.id,
+      dept_id: r.dept_id,
+      dept: r.departments ?? null,
+    })),
+  };
+}
+
+// Ambil semua dokumen status 'terbaru' untuk dropdown
+export async function getActiveDocuments() {
+  const { data } = await supabaseAdmin
+    .from("documents")
+    .select(
+      `
+      id, doc_number, title, revision,
+      document_types(name),
+      departments(code)
+    `
+    )
+    .eq("status", "terbaru")
+    .order("doc_number");
+
+  return (data ?? []).map((d: any) => ({
+    id: d.id,
+    doc_number: d.doc_number,
+    title: d.title,
+    revision: d.revision,
+    type_name: d.document_types?.name ?? "",
+    dept_code: d.departments?.code ?? "",
+  }));
 }

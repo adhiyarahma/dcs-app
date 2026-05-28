@@ -298,43 +298,113 @@ export async function deleteDocumentType(id: string) {
 export async function createDepartment(formData: FormData) {
   const code = (formData.get("code") as string)?.trim().toUpperCase();
   const name = (formData.get("name") as string)?.trim();
-  if (!code) return { error: "Kode departemen wajib diisi." };
-  if (!name) return { error: "Nama departemen wajib diisi." };
+
+  // 1. Ambil semua keys dari formData
+  const keys = Array.from(formData.keys());
+
+  // 2. Filter keys yang berawalan "head_name_" untuk mencari ada berapa kepala bagian
+  const headIndices = keys
+    .filter((k) => k.startsWith("head_name_"))
+    .map((k) => k.split("_")[2]); // Mengambil angka indeksnya (0, 1, dst)
+
+  const heads = headIndices
+    .map((index) => ({
+      name: formData.get(`head_name_${index}`) as string,
+      title: formData.get(`head_title_${index}`) as string,
+    }))
+    .filter((h) => h.name && h.title); // Pastikan tidak kosong
+
+  if (!code || !name) return { error: "Kode dan Nama departemen wajib diisi." };
+
   try {
-    const { error } = await supabaseAdmin
+    // 1. Insert ke departments
+    const { data: deptData, error: deptError } = await supabaseAdmin
       .from("departments")
-      .insert({ code, name });
-    if (error) {
-      if (error.code === "23505")
-        return { error: "Kode departemen sudah ada." };
+      .insert({ code, name })
+      .select("id")
+      .single();
+
+    if (deptError || !deptData) {
+      console.error("Dept Error:", deptError);
       return { error: "Gagal membuat departemen." };
     }
+
+    // 3. Sekarang variabel 'heads' sudah berisi array objek yang benar
+    if (heads.length > 0) {
+      const headsToInsert = heads.map((h: any) => ({
+        department_id: deptData.id,
+        name: h.name,
+        title: h.title,
+      }));
+
+      const { error: headError } = await supabaseAdmin
+        .from("department_heads")
+        .insert(headsToInsert);
+
+      if (headError) {
+        console.error("Gagal insert heads:", headError);
+        return {
+          error: "Departemen terbuat, tapi gagal menyimpan kepala bagian.",
+        };
+      }
+    }
+
     revalidatePath("/dashboard/master/departments");
     return { success: true };
-  } catch {
-    return { error: "Gagal membuat departemen." };
+  } catch (err) {
+    return { error: "Terjadi kesalahan sistem." };
   }
 }
 
 export async function updateDepartment(id: string, formData: FormData) {
   const code = (formData.get("code") as string)?.trim().toUpperCase();
   const name = (formData.get("name") as string)?.trim();
-  if (!code) return { error: "Kode departemen wajib diisi." };
-  if (!name) return { error: "Nama departemen wajib diisi." };
+  // Ubah key dari "heads" menjadi "heads_json" sesuai log Anda
+  const headsRaw = formData.get("heads_json") as string;
+  const heads = headsRaw ? JSON.parse(headsRaw) : [];
+
+  if (!code || !name) return { error: "Kode dan Nama departemen wajib diisi." };
+
   try {
-    const { error } = await supabaseAdmin
+    // 1. Update tabel departments
+    const { error: deptError } = await supabaseAdmin
       .from("departments")
       .update({ code, name })
       .eq("id", id);
-    if (error) {
-      if (error.code === "23505")
-        return { error: "Kode departemen sudah ada." };
-      return { error: "Gagal mengupdate departemen." };
+
+    if (deptError) throw new Error("Gagal update tabel utama.");
+
+    // 2. Refresh heads: Hapus semua
+    const { error: deleteError } = await supabaseAdmin
+      .from("department_heads")
+      .delete()
+      .eq("department_id", id);
+
+    if (deleteError) throw new Error("Gagal menghapus data kepala lama.");
+
+    // 3. Insert yang baru
+    if (heads.length > 0) {
+      const headsToInsert = heads.map((h: any) => ({
+        department_id: id,
+        name: h.name,
+        title: h.title,
+      }));
+
+      const { error: insertError } = await supabaseAdmin
+        .from("department_heads")
+        .insert(headsToInsert);
+
+      if (insertError)
+        throw new Error(
+          `Gagal menyimpan kepala departemen: ${insertError.message}`
+        );
     }
+
     revalidatePath("/dashboard/master/departments");
     return { success: true };
-  } catch {
-    return { error: "Gagal mengupdate departemen." };
+  } catch (err: any) {
+    console.error("Update Error:", err);
+    return { error: err.message || "Gagal mengupdate departemen." };
   }
 }
 
@@ -1019,4 +1089,203 @@ export async function getTemplateColumns(docTypeName: string) {
   const extraKey = DOCUMENT_TYPE_KEY[docTypeName] ?? "";
   const extraFields = EXTRA_FIELDS[extraKey] ?? [];
   return { fixedFields: FIXED_FIELDS, extraFields };
+}
+
+// ============================================================
+// DISTRIBUTIONS
+// ============================================================
+
+export type DistributionItemInput = {
+  document_id: string;
+  quantity: number;
+};
+
+export async function createDistribution(
+  formNumber: string,
+  distributedDate: string,
+  handedByDeptId: string,
+  items: DistributionItemInput[],
+  recipientDeptIds: string[],
+  createdBy: string,
+  notes?: string
+) {
+  if (!formNumber?.trim()) return { error: "Nomor form wajib diisi." };
+  if (!distributedDate) return { error: "Tanggal distribusi wajib diisi." };
+  if (!handedByDeptId) return { error: "Departemen pengirim wajib dipilih." };
+  if (!items.length) return { error: "Minimal 1 dokumen harus dipilih." };
+  if (!recipientDeptIds.length)
+    return { error: "Minimal 1 departemen penerima harus dipilih." };
+  if (items.length > 40)
+    return { error: "Maksimal 40 dokumen per form distribusi." };
+
+  // Cek duplikat form_number
+  const { data: existing } = await supabaseAdmin
+    .from("distributions")
+    .select("id")
+    .eq("form_number", formNumber.trim())
+    .single();
+
+  if (existing) return { error: "Nomor form sudah digunakan." };
+
+  try {
+    // 1. Insert header
+    const { data: dist, error: distError } = await supabaseAdmin
+      .from("distributions")
+      .insert({
+        form_number: formNumber.trim(),
+        distributed_date: distributedDate,
+        handed_by_dept_id: handedByDeptId,
+        notes: notes?.trim() || null,
+        created_by: createdBy,
+      })
+      .select("id")
+      .single();
+
+    if (distError || !dist) return { error: "Gagal membuat form distribusi." };
+
+    const distributionId = dist.id;
+
+    // 2. Insert items
+    const itemsToInsert = items.map((item) => ({
+      distribution_id: distributionId,
+      document_id: item.document_id,
+      quantity: item.quantity,
+    }));
+
+    const { error: itemsError } = await supabaseAdmin
+      .from("distribution_items")
+      .insert(itemsToInsert);
+
+    if (itemsError) {
+      await supabaseAdmin
+        .from("distributions")
+        .delete()
+        .eq("id", distributionId);
+      return { error: "Gagal menyimpan daftar dokumen." };
+    }
+
+    // 3. Insert recipients
+    const recipientsToInsert = recipientDeptIds.map((deptId) => ({
+      distribution_id: distributionId,
+      dept_id: deptId,
+    }));
+
+    const { error: recipientsError } = await supabaseAdmin
+      .from("distribution_recipients")
+      .insert(recipientsToInsert);
+
+    if (recipientsError) {
+      await supabaseAdmin
+        .from("distributions")
+        .delete()
+        .eq("id", distributionId);
+      return { error: "Gagal menyimpan daftar penerima." };
+    }
+
+    revalidatePath("/dashboard/document-control/distributions");
+    return { success: true, id: distributionId };
+  } catch {
+    return { error: "Gagal membuat form distribusi." };
+  }
+}
+
+export async function updateDistribution(
+  id: string,
+  formNumber: string,
+  distributedDate: string,
+  handedByDeptId: string,
+  items: DistributionItemInput[],
+  recipientDeptIds: string[],
+  notes?: string
+) {
+  if (!formNumber?.trim()) return { error: "Nomor form wajib diisi." };
+  if (!distributedDate) return { error: "Tanggal distribusi wajib diisi." };
+  if (!handedByDeptId) return { error: "Departemen pengirim wajib dipilih." };
+  if (!items.length) return { error: "Minimal 1 dokumen harus dipilih." };
+  if (!recipientDeptIds.length)
+    return { error: "Minimal 1 departemen penerima harus dipilih." };
+  if (items.length > 40)
+    return { error: "Maksimal 40 dokumen per form distribusi." };
+
+  // Cek duplikat form_number (exclude diri sendiri)
+  const { data: existing } = await supabaseAdmin
+    .from("distributions")
+    .select("id")
+    .eq("form_number", formNumber.trim())
+    .neq("id", id)
+    .single();
+
+  if (existing) return { error: "Nomor form sudah digunakan." };
+
+  try {
+    // 1. Update header
+    const { error: distError } = await supabaseAdmin
+      .from("distributions")
+      .update({
+        form_number: formNumber.trim(),
+        distributed_date: distributedDate,
+        handed_by_dept_id: handedByDeptId,
+        notes: notes?.trim() || null,
+      })
+      .eq("id", id);
+
+    if (distError) return { error: "Gagal mengupdate form distribusi." };
+
+    // 2. Replace items (delete + insert)
+    await supabaseAdmin
+      .from("distribution_items")
+      .delete()
+      .eq("distribution_id", id);
+
+    const itemsToInsert = items.map((item) => ({
+      distribution_id: id,
+      document_id: item.document_id,
+      quantity: item.quantity,
+    }));
+
+    const { error: itemsError } = await supabaseAdmin
+      .from("distribution_items")
+      .insert(itemsToInsert);
+
+    if (itemsError) return { error: "Gagal mengupdate daftar dokumen." };
+
+    // 3. Replace recipients (delete + insert)
+    await supabaseAdmin
+      .from("distribution_recipients")
+      .delete()
+      .eq("distribution_id", id);
+
+    const recipientsToInsert = recipientDeptIds.map((deptId) => ({
+      distribution_id: id,
+      dept_id: deptId,
+    }));
+
+    const { error: recipientsError } = await supabaseAdmin
+      .from("distribution_recipients")
+      .insert(recipientsToInsert);
+
+    if (recipientsError) return { error: "Gagal mengupdate daftar penerima." };
+
+    revalidatePath("/dashboard/document-control/distributions");
+    return { success: true };
+  } catch {
+    return { error: "Gagal mengupdate form distribusi." };
+  }
+}
+
+export async function deleteDistribution(id: string) {
+  try {
+    // CASCADE akan hapus items & recipients otomatis
+    const { error } = await supabaseAdmin
+      .from("distributions")
+      .delete()
+      .eq("id", id);
+
+    if (error) return { error: "Gagal menghapus form distribusi." };
+
+    revalidatePath("/dashboard/document-control/distributions");
+    return { success: true };
+  } catch {
+    return { error: "Gagal menghapus form distribusi." };
+  }
 }
