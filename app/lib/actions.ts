@@ -1095,201 +1095,191 @@ export async function getTemplateColumns(docTypeName: string) {
 // DISTRIBUTIONS
 // ============================================================
 
-export type DistributionItemInput = {
-  document_id: string;
-  quantity: number;
+// Tipe input per dokumen: document_id + daftar penerima dengan qty masing-masing
+export type DistributionRecipientInput = {
+  dept_id: string;
+  qty: number;
 };
 
+export type DistributionItemInput = {
+  document_id: string;
+  distributed_date?: string | null; // null = pakai tanggal form (distributed_date header)
+  recipients: DistributionRecipientInput[];
+};
+
+// ─── CREATE ───────────────────────────────────────────────────────────────────
 export async function createDistribution(
   formNumber: string,
   distributedDate: string,
   handedByDeptId: string,
   items: DistributionItemInput[],
-  recipientDeptIds: string[],
   createdBy: string,
-  notes?: string
+  notes: string
 ) {
-  if (!formNumber?.trim()) return { error: "Nomor form wajib diisi." };
-  if (!distributedDate) return { error: "Tanggal distribusi wajib diisi." };
-  if (!handedByDeptId) return { error: "Departemen pengirim wajib dipilih." };
-  if (!items.length) return { error: "Minimal 1 dokumen harus dipilih." };
-  if (!recipientDeptIds.length)
-    return { error: "Minimal 1 departemen penerima harus dipilih." };
-  if (items.length > 40)
-    return { error: "Maksimal 40 dokumen per form distribusi." };
-
-  // Cek duplikat form_number
-  const { data: existing } = await supabaseAdmin
+  // 1. Cek nomor form sudah digunakan
+  const { count } = await supabaseAdmin
     .from("distributions")
+    .select("*", { count: "exact", head: true })
+    .eq("form_number", formNumber);
+
+  if ((count ?? 0) > 0) {
+    return { error: "Nomor form sudah digunakan." };
+  }
+
+  // 2. Insert distribution header
+  const { data: dist, error: distErr } = await supabaseAdmin
+    .from("distributions")
+    .insert({
+      form_number: formNumber,
+      distributed_date: distributedDate,
+      handed_by_dept_id: handedByDeptId,
+      created_by: createdBy,
+      notes: notes || null,
+    })
     .select("id")
-    .eq("form_number", formNumber.trim())
     .single();
 
-  if (existing) return { error: "Nomor form sudah digunakan." };
+  if (distErr || !dist) {
+    return { error: distErr?.message ?? "Gagal membuat distribusi." };
+  }
 
-  try {
-    // 1. Insert header
-    const { data: dist, error: distError } = await supabaseAdmin
-      .from("distributions")
+  // 3. Insert setiap item + recipients-nya
+  for (const item of items) {
+    // Insert distribution_item (dengan tanggal override jika ada)
+    const { data: distItem, error: itemErr } = await supabaseAdmin
+      .from("distribution_items")
       .insert({
-        form_number: formNumber.trim(),
-        distributed_date: distributedDate,
-        handed_by_dept_id: handedByDeptId,
-        notes: notes?.trim() || null,
-        created_by: createdBy,
+        distribution_id: dist.id,
+        document_id: item.document_id,
+        distributed_date: item.distributed_date ?? null,
       })
       .select("id")
       .single();
 
-    if (distError || !dist) return { error: "Gagal membuat form distribusi." };
-
-    const distributionId = dist.id;
-
-    // 2. Insert items
-    const itemsToInsert = items.map((item) => ({
-      distribution_id: distributionId,
-      document_id: item.document_id,
-      quantity: item.quantity,
-    }));
-
-    const { error: itemsError } = await supabaseAdmin
-      .from("distribution_items")
-      .insert(itemsToInsert);
-
-    if (itemsError) {
-      await supabaseAdmin
-        .from("distributions")
-        .delete()
-        .eq("id", distributionId);
-      return { error: "Gagal menyimpan daftar dokumen." };
+    if (itemErr || !distItem) {
+      return { error: itemErr?.message ?? "Gagal menyimpan item dokumen." };
     }
 
-    // 3. Insert recipients
-    const recipientsToInsert = recipientDeptIds.map((deptId) => ({
-      distribution_id: distributionId,
-      dept_id: deptId,
-    }));
+    // Insert recipients untuk item ini
+    if (item.recipients.length > 0) {
+      const { error: recipErr } = await supabaseAdmin
+        .from("distribution_recipients")
+        .insert(
+          item.recipients.map((r) => ({
+            distribution_item_id: distItem.id,
+            dept_id: r.dept_id,
+            qty: r.qty,
+          }))
+        );
 
-    const { error: recipientsError } = await supabaseAdmin
-      .from("distribution_recipients")
-      .insert(recipientsToInsert);
-
-    if (recipientsError) {
-      await supabaseAdmin
-        .from("distributions")
-        .delete()
-        .eq("id", distributionId);
-      return { error: "Gagal menyimpan daftar penerima." };
+      if (recipErr) {
+        return { error: recipErr.message ?? "Gagal menyimpan penerima." };
+      }
     }
-
-    revalidatePath("/dashboard/document-control/distributions");
-    return { success: true, id: distributionId };
-  } catch {
-    return { error: "Gagal membuat form distribusi." };
   }
+
+  revalidatePath("/distributions");
+  return { success: true };
 }
 
+// ─── UPDATE ───────────────────────────────────────────────────────────────────
 export async function updateDistribution(
   id: string,
   formNumber: string,
   distributedDate: string,
   handedByDeptId: string,
   items: DistributionItemInput[],
-  recipientDeptIds: string[],
-  notes?: string
+  notes: string
 ) {
-  if (!formNumber?.trim()) return { error: "Nomor form wajib diisi." };
-  if (!distributedDate) return { error: "Tanggal distribusi wajib diisi." };
-  if (!handedByDeptId) return { error: "Departemen pengirim wajib dipilih." };
-  if (!items.length) return { error: "Minimal 1 dokumen harus dipilih." };
-  if (!recipientDeptIds.length)
-    return { error: "Minimal 1 departemen penerima harus dipilih." };
-  if (items.length > 40)
-    return { error: "Maksimal 40 dokumen per form distribusi." };
-
-  // Cek duplikat form_number (exclude diri sendiri)
+  // 1. Cek nomor form tidak dipakai distribusi lain
   const { data: existing } = await supabaseAdmin
     .from("distributions")
     .select("id")
-    .eq("form_number", formNumber.trim())
+    .eq("form_number", formNumber)
     .neq("id", id)
     .single();
 
-  if (existing) return { error: "Nomor form sudah digunakan." };
+  if (existing) {
+    return { error: "Nomor form sudah digunakan oleh distribusi lain." };
+  }
 
-  try {
-    // 1. Update header
-    const { error: distError } = await supabaseAdmin
-      .from("distributions")
-      .update({
-        form_number: formNumber.trim(),
-        distributed_date: distributedDate,
-        handed_by_dept_id: handedByDeptId,
-        notes: notes?.trim() || null,
+  // 2. Update header
+  const { error: updateErr } = await supabaseAdmin
+    .from("distributions")
+    .update({
+      form_number: formNumber,
+      distributed_date: distributedDate,
+      handed_by_dept_id: handedByDeptId,
+      notes: notes || null,
+    })
+    .eq("id", id);
+
+  if (updateErr) {
+    return { error: updateErr.message ?? "Gagal mengupdate distribusi." };
+  }
+
+  // 3. Hapus semua items lama (cascade akan hapus recipients juga)
+  const { error: deleteErr } = await supabaseAdmin
+    .from("distribution_items")
+    .delete()
+    .eq("distribution_id", id);
+
+  if (deleteErr) {
+    return { error: deleteErr.message ?? "Gagal menghapus item lama." };
+  }
+
+  // 4. Insert items + recipients baru
+  for (const item of items) {
+    const { data: distItem, error: itemErr } = await supabaseAdmin
+      .from("distribution_items")
+      .insert({
+        distribution_id: id,
+        document_id: item.document_id,
+        distributed_date: item.distributed_date ?? null,
       })
-      .eq("id", id);
+      .select("id")
+      .single();
 
-    if (distError) return { error: "Gagal mengupdate form distribusi." };
+    if (itemErr || !distItem) {
+      return { error: itemErr?.message ?? "Gagal menyimpan item dokumen." };
+    }
 
-    // 2. Replace items (delete + insert)
-    await supabaseAdmin
-      .from("distribution_items")
-      .delete()
-      .eq("distribution_id", id);
+    if (item.recipients.length > 0) {
+      const { error: recipErr } = await supabaseAdmin
+        .from("distribution_recipients")
+        .insert(
+          item.recipients.map((r) => ({
+            distribution_item_id: distItem.id,
+            dept_id: r.dept_id,
+            qty: r.qty,
+          }))
+        );
 
-    const itemsToInsert = items.map((item) => ({
-      distribution_id: id,
-      document_id: item.document_id,
-      quantity: item.quantity,
-    }));
-
-    const { error: itemsError } = await supabaseAdmin
-      .from("distribution_items")
-      .insert(itemsToInsert);
-
-    if (itemsError) return { error: "Gagal mengupdate daftar dokumen." };
-
-    // 3. Replace recipients (delete + insert)
-    await supabaseAdmin
-      .from("distribution_recipients")
-      .delete()
-      .eq("distribution_id", id);
-
-    const recipientsToInsert = recipientDeptIds.map((deptId) => ({
-      distribution_id: id,
-      dept_id: deptId,
-    }));
-
-    const { error: recipientsError } = await supabaseAdmin
-      .from("distribution_recipients")
-      .insert(recipientsToInsert);
-
-    if (recipientsError) return { error: "Gagal mengupdate daftar penerima." };
-
-    revalidatePath("/dashboard/document-control/distributions");
-    return { success: true };
-  } catch {
-    return { error: "Gagal mengupdate form distribusi." };
+      if (recipErr) {
+        return { error: recipErr.message ?? "Gagal menyimpan penerima." };
+      }
+    }
   }
+
+  revalidatePath("/distributions");
+  return { success: true };
 }
 
+// ─── DELETE ───────────────────────────────────────────────────────────────────
 export async function deleteDistribution(id: string) {
-  try {
-    // CASCADE akan hapus items & recipients otomatis
-    const { error } = await supabaseAdmin
-      .from("distributions")
-      .delete()
-      .eq("id", id);
+  // distribution_items + distribution_recipients terhapus otomatis via CASCADE
+  const { error } = await supabaseAdmin
+    .from("distributions")
+    .delete()
+    .eq("id", id);
 
-    if (error) return { error: "Gagal menghapus form distribusi." };
+  if (error) return { error: error.message };
 
-    revalidatePath("/dashboard/document-control/distributions");
-    return { success: true };
-  } catch {
-    return { error: "Gagal menghapus form distribusi." };
-  }
+  revalidatePath("/distributions");
+  return { success: true };
 }
 
+// ─── FETCH NEXT FORM NUMBER ───────────────────────────────────────────────────
 export async function fetchNextFormNumber(): Promise<string> {
   const now = new Date();
   const mm = String(now.getMonth() + 1).padStart(2, "0");
@@ -1310,5 +1300,5 @@ export async function fetchNextFormNumber(): Promise<string> {
     .lt("created_at", startOfNext);
 
   const nextNum = String((count ?? 0) + 1).padStart(3, "0");
-  return `${nextNum}/MRP/${mm}/${yy}`;
+  return `${nextNum}/DCC/${mm}/${yy}`;
 }

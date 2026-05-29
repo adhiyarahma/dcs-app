@@ -15,16 +15,18 @@ import {
   BuildingOfficeIcon,
   CalendarIcon,
   ChevronDownIcon,
-  CheckIcon,
   ArrowPathIcon,
+  EyeIcon,
 } from "@heroicons/react/24/outline";
+import DistributionSpreadsheetView from "./DistributionSpreadsheetView";
 import {
   createDistribution,
   updateDistribution,
   deleteDistribution,
+  fetchNextFormNumber,
   type DistributionItemInput,
+  type DistributionRecipientInput,
 } from "@/app/lib/actions";
-import { fetchNextFormNumber } from "@/app/lib/actions";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type Head = { name: string; title: string | null };
@@ -45,22 +47,23 @@ type DocOption = {
   dept_code: string;
 };
 
+type DistRecipient = {
+  id: string;
+  qty: number;
+  dept_id?: string;
+  dept: Dept | null;
+};
+
 type DistItem = {
   id: string;
-  quantity: number;
+  distributed_date?: string | null; // override tanggal per dokumen
   document: {
     id: string;
     doc_number: string;
     title: string;
     revision: number;
   } | null;
-};
-
-type DistRecipient = {
-  id: string;
-  qty?: number;
-  dept_id?: string;
-  dept: Dept | null;
+  recipients: DistRecipient[];
 };
 
 type Distribution = {
@@ -72,18 +75,19 @@ type Distribution = {
   handed_by_dept: Dept | null;
   created_by_name: string;
   items: DistItem[];
-  recipients: DistRecipient[];
 };
 
-// Tipe untuk penerima di form (dept + qty)
-type RecipientEntry = {
-  dept_id: string;
-  qty: number;
+// State form per item (dokumen + penerima + tanggal override opsional)
+type ItemFormEntry = {
+  document_id: string;
+  override_date: string | null; // null = pakai tanggal form
+  recipients: DistributionRecipientInput[];
 };
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const PAGE_SIZE = 10;
 const DCC_CODE = "DCC";
+const MAX_DOCS = 5;
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 function formatDate(dateStr: string) {
@@ -97,6 +101,10 @@ function formatDate(dateStr: string) {
 
 function getDeptHead(dept: Dept | null): Head | null {
   return dept?.heads?.[0] ?? null;
+}
+
+function emptyItem(): ItemFormEntry {
+  return { document_id: "", override_date: null, recipients: [] };
 }
 
 // ─── Pagination ───────────────────────────────────────────────────────────────
@@ -229,37 +237,134 @@ function DeleteModal({
   );
 }
 
-// ─── Recipients with Qty ──────────────────────────────────────────────────────
-// Komponen untuk menambah departemen penerima beserta qty masing-masing
+// ─── Doc Dropdown ─────────────────────────────────────────────────────────────
+function DocDropdown({
+  docOptions,
+  value,
+  usedIds,
+  lockedDeptCode,
+  onChange,
+}: {
+  docOptions: DocOption[];
+  value: string;
+  usedIds: string[];
+  lockedDeptCode: string | null;
+  onChange: (id: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+
+  const selected = docOptions.find((d) => d.id === value);
+
+  const available = docOptions.filter((d) => {
+    if (usedIds.includes(d.id) && d.id !== value) return false;
+    if (lockedDeptCode && d.dept_code !== lockedDeptCode) return false;
+    return true;
+  });
+
+  const filtered = available.filter(
+    (d) =>
+      d.doc_number.toLowerCase().includes(search.toLowerCase()) ||
+      d.title.toLowerCase().includes(search.toLowerCase())
+  );
+
+  return (
+    <div className="relative flex-1">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center justify-between border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-left hover:border-blue-400 transition-all bg-white"
+      >
+        <span className={clsx("truncate", !selected && "text-slate-400")}>
+          {selected
+            ? `${selected.doc_number} — ${selected.title}`
+            : "Pilih dokumen..."}
+        </span>
+        <ChevronDownIcon className="w-3.5 h-3.5 text-slate-400 shrink-0 ml-2" />
+      </button>
+      {open && (
+        <div className="absolute z-30 mt-1 w-full bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden">
+          <div className="p-2 border-b border-slate-100">
+            <div className="relative">
+              <MagnifyingGlassIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+              <input
+                autoFocus
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Cari dokumen..."
+                className="w-full pl-8 pr-3 py-1.5 text-xs border border-slate-200 rounded-lg outline-none focus:border-blue-400"
+              />
+            </div>
+          </div>
+          <div className="max-h-48 overflow-y-auto divide-y divide-slate-50">
+            {filtered.length === 0 ? (
+              <p className="px-4 py-3 text-xs text-slate-400 text-center">
+                {lockedDeptCode
+                  ? `Tidak ada dokumen dari dept ${lockedDeptCode}`
+                  : "Tidak ditemukan"}
+              </p>
+            ) : (
+              filtered.map((doc) => (
+                <button
+                  key={doc.id}
+                  type="button"
+                  onClick={() => {
+                    onChange(doc.id);
+                    setOpen(false);
+                    setSearch("");
+                  }}
+                  className="w-full px-4 py-2.5 text-left hover:bg-slate-50 transition-colors"
+                >
+                  <p className="text-xs font-bold text-slate-700">
+                    {doc.doc_number}
+                  </p>
+                  <p className="text-xs text-slate-500 truncate">{doc.title}</p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">
+                    Rev. {doc.revision} · {doc.type_name}
+                    {doc.dept_code && (
+                      <span className="font-mono font-bold text-blue-600 ml-1">
+                        · {doc.dept_code}
+                      </span>
+                    )}
+                  </p>
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Recipients Input (per item) ──────────────────────────────────────────────
 function RecipientsInput({
   departments,
   recipients,
   onChange,
 }: {
   departments: Dept[];
-  recipients: RecipientEntry[];
-  onChange: (entries: RecipientEntry[]) => void;
+  recipients: DistributionRecipientInput[];
+  onChange: (r: DistributionRecipientInput[]) => void;
 }) {
-  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
 
-  // Dept yang belum dipilih sebagai penerima
   const selectedIds = recipients.map((r) => r.dept_id);
-  const availableDepts = departments.filter((d) => !selectedIds.includes(d.id));
-
-  const filteredDepts = availableDepts.filter(
+  const available = departments.filter((d) => !selectedIds.includes(d.id));
+  const filtered = available.filter(
     (d) =>
       d.code.toLowerCase().includes(search.toLowerCase()) ||
       d.name.toLowerCase().includes(search.toLowerCase())
   );
 
-  function addRecipient(deptId: string) {
+  function add(deptId: string) {
     onChange([...recipients, { dept_id: deptId, qty: 1 }]);
-    setDropdownOpen(false);
+    setOpen(false);
     setSearch("");
   }
 
-  function removeRecipient(deptId: string) {
+  function remove(deptId: string) {
     onChange(recipients.filter((r) => r.dept_id !== deptId));
   }
 
@@ -272,10 +377,13 @@ function RecipientsInput({
   }
 
   return (
-    <div className="space-y-2">
-      {/* Daftar penerima yang sudah dipilih */}
+    <div className="space-y-1.5 pl-4 border-l-2 border-slate-100 ml-1">
+      <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">
+        Diterima Oleh
+      </p>
+
       {recipients.length > 0 && (
-        <div className="space-y-2">
+        <div className="space-y-1">
           {recipients.map((entry) => {
             const dept = departments.find((d) => d.id === entry.dept_id);
             if (!dept) return null;
@@ -283,29 +391,23 @@ function RecipientsInput({
             return (
               <div
                 key={entry.dept_id}
-                className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5"
+                className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-2.5 py-1.5"
               >
-                {/* Info dept */}
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-mono text-xs font-bold text-blue-700">
+                  <div className="flex items-center gap-1">
+                    <span className="font-mono text-[11px] font-bold text-blue-700">
                       {dept.code}
                     </span>
-                    <span className="text-xs text-slate-600 truncate">
+                    <span className="text-[11px] text-slate-600 truncate">
                       {dept.name}
                     </span>
                   </div>
                   {head?.name && (
-                    <p className="text-[10px] text-slate-400 mt-0.5">
-                      {head.name}
-                    </p>
+                    <p className="text-[10px] text-slate-400">{head.name}</p>
                   )}
                 </div>
-                {/* Input qty */}
-                <div className="flex items-center gap-1.5 shrink-0">
-                  <label className="text-[10px] text-slate-400 font-medium uppercase tracking-wide">
-                    Qty
-                  </label>
+                <div className="flex items-center gap-1 shrink-0">
+                  <span className="text-[10px] text-slate-400">Qty</span>
                   <input
                     type="number"
                     min={1}
@@ -313,16 +415,15 @@ function RecipientsInput({
                     onChange={(e) =>
                       updateQty(entry.dept_id, parseInt(e.target.value) || 1)
                     }
-                    className="w-16 border border-slate-200 rounded-lg px-2 py-1 text-sm text-center outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 transition-all bg-white"
+                    className="w-14 border border-slate-200 rounded-lg px-1.5 py-1 text-xs text-center outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/10 transition-all bg-white"
                   />
                 </div>
-                {/* Tombol hapus */}
                 <button
                   type="button"
-                  onClick={() => removeRecipient(entry.dept_id)}
-                  className="p-1 text-slate-300 hover:text-red-500 transition-colors shrink-0"
+                  onClick={() => remove(entry.dept_id)}
+                  className="p-0.5 text-slate-300 hover:text-red-500 transition-colors shrink-0"
                 >
-                  <XMarkIcon className="w-4 h-4" />
+                  <XMarkIcon className="w-3.5 h-3.5" />
                 </button>
               </div>
             );
@@ -330,20 +431,18 @@ function RecipientsInput({
         </div>
       )}
 
-      {/* Tombol + dropdown tambah penerima */}
-      {availableDepts.length > 0 && (
+      {available.length > 0 && (
         <div className="relative">
           <button
             type="button"
-            onClick={() => setDropdownOpen(!dropdownOpen)}
-            className="flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-700 transition-colors"
+            onClick={() => setOpen(!open)}
+            className="flex items-center gap-1 text-[11px] font-medium text-blue-600 hover:text-blue-700 transition-colors"
           >
-            <PlusIcon className="w-3.5 h-3.5" />
+            <PlusIcon className="w-3 h-3" />
             Tambah penerima
           </button>
-
-          {dropdownOpen && (
-            <div className="absolute z-20 mt-1 w-72 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden">
+          {open && (
+            <div className="absolute z-30 mt-1 w-64 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden">
               <div className="p-2 border-b border-slate-100">
                 <div className="relative">
                   <MagnifyingGlassIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
@@ -356,36 +455,39 @@ function RecipientsInput({
                   />
                 </div>
               </div>
-              <div className="max-h-48 overflow-y-auto divide-y divide-slate-50">
-                {filteredDepts.length === 0 && (
+              <div className="max-h-44 overflow-y-auto divide-y divide-slate-50">
+                {filtered.length === 0 ? (
                   <p className="px-4 py-3 text-xs text-slate-400 text-center">
                     Tidak ditemukan
                   </p>
+                ) : (
+                  filtered.map((dept) => {
+                    const head = getDeptHead(dept);
+                    return (
+                      <button
+                        key={dept.id}
+                        type="button"
+                        onClick={() => add(dept.id)}
+                        className="w-full flex items-center justify-between px-3 py-2 text-sm hover:bg-slate-50 transition-colors text-left"
+                      >
+                        <div>
+                          <span className="font-mono text-xs font-bold text-blue-700 mr-1.5">
+                            {dept.code}
+                          </span>
+                          <span className="text-slate-700 text-xs">
+                            {dept.name}
+                          </span>
+                          {head?.name && (
+                            <p className="text-[10px] text-slate-400 mt-0.5">
+                              {head.name}
+                            </p>
+                          )}
+                        </div>
+                        <PlusIcon className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                      </button>
+                    );
+                  })
                 )}
-                {filteredDepts.map((dept) => {
-                  const head = getDeptHead(dept);
-                  return (
-                    <button
-                      key={dept.id}
-                      type="button"
-                      onClick={() => addRecipient(dept.id)}
-                      className="w-full flex items-center justify-between px-4 py-2.5 text-sm hover:bg-slate-50 transition-colors text-left"
-                    >
-                      <div>
-                        <span className="font-mono text-xs font-bold text-blue-700 mr-2">
-                          {dept.code}
-                        </span>
-                        <span className="text-slate-700">{dept.name}</span>
-                        {head?.name && (
-                          <p className="text-xs text-slate-400 mt-0.5">
-                            {head.name}
-                          </p>
-                        )}
-                      </div>
-                      <PlusIcon className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                    </button>
-                  );
-                })}
               </div>
             </div>
           )}
@@ -393,184 +495,118 @@ function RecipientsInput({
       )}
 
       {recipients.length === 0 && (
-        <p className="text-xs text-slate-400 italic">
-          Belum ada penerima. Klik "Tambah penerima" di atas.
-        </p>
+        <p className="text-[10px] text-slate-400 italic">Belum ada penerima.</p>
       )}
     </div>
   );
 }
 
-// ─── Document List Input (1–5 dok, dept harus sama) ──────────────────────────
-const MAX_DOCS = 5;
-
-function DocListInput({
+// ─── Item Row (satu dokumen + penerimanya) ────────────────────────────────────
+function ItemRow({
+  index,
+  item,
+  defaultDate,
+  departments,
   docOptions,
-  selectedIds,
+  usedDocIds,
+  lockedDeptCode,
   onChange,
+  onRemove,
+  canRemove,
 }: {
+  index: number;
+  item: ItemFormEntry;
+  defaultDate: string; // tanggal form — jadi default
+  departments: Dept[];
   docOptions: DocOption[];
-  selectedIds: string[];
-  onChange: (ids: string[]) => void;
+  usedDocIds: string[];
+  lockedDeptCode: string | null;
+  onChange: (v: ItemFormEntry) => void;
+  onRemove: () => void;
+  canRemove: boolean;
 }) {
-  const [search, setSearch] = useState("");
-  const [open, setOpen] = useState(false);
-
-  // Dept code dari dokumen pertama yang sudah dipilih (jadi acuan filter)
-  const firstDoc = docOptions.find((d) => d.id === selectedIds[0]);
-  const lockedDeptCode = firstDoc?.dept_code ?? null;
-
-  // Dokumen yang tersedia: belum dipilih + (jika sudah ada pilihan pertama) dept harus sama
-  const available = docOptions.filter((d) => {
-    if (selectedIds.includes(d.id)) return false;
-    if (lockedDeptCode && d.dept_code !== lockedDeptCode) return false;
-    return true;
-  });
-
-  const filtered = available.filter(
-    (d) =>
-      d.doc_number.toLowerCase().includes(search.toLowerCase()) ||
-      d.title.toLowerCase().includes(search.toLowerCase())
-  );
-
-  function addDoc(id: string) {
-    onChange([...selectedIds, id]);
-    setOpen(false);
-    setSearch("");
-  }
-
-  function removeDoc(id: string) {
-    const next = selectedIds.filter((s) => s !== id);
-    onChange(next);
-  }
+  const hasOverride = item.override_date !== null && item.override_date !== "";
+  const effectiveDate = hasOverride ? item.override_date! : defaultDate;
 
   return (
-    <div className="space-y-2">
-      {/* Daftar dokumen yang sudah dipilih */}
-      {selectedIds.length > 0 && (
-        <div className="space-y-1.5">
-          {selectedIds.map((id, idx) => {
-            const doc = docOptions.find((d) => d.id === id);
-            if (!doc) return null;
-            return (
-              <div
-                key={id}
-                className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2"
-              >
-                <span className="text-[10px] font-bold text-slate-400 w-4 shrink-0 text-center">
-                  {idx + 1}
-                </span>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-bold text-slate-700 truncate">
-                    {doc.doc_number}
-                  </p>
-                  <p className="text-[10px] text-slate-500 truncate">
-                    {doc.title}
-                  </p>
-                  <p className="text-[10px] text-slate-400">
-                    Rev. {doc.revision} · {doc.type_name}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => removeDoc(id)}
-                  className="p-1 text-slate-300 hover:text-red-500 transition-colors shrink-0"
-                >
-                  <XMarkIcon className="w-4 h-4" />
-                </button>
-              </div>
-            );
-          })}
-        </div>
+    <div
+      className={clsx(
+        "border rounded-xl p-3 space-y-2.5",
+        hasOverride
+          ? "bg-amber-50 border-amber-200"
+          : "bg-slate-50 border-slate-200"
       )}
-
-      {/* Tombol tambah dokumen (max 5) */}
-      {selectedIds.length < MAX_DOCS && (
-        <div className="relative">
+    >
+      {/* Header row: nomor + pilih dokumen + hapus */}
+      <div className="flex items-center gap-2">
+        <span className="text-[10px] font-bold text-slate-400 w-5 shrink-0 text-center">
+          {index + 1}
+        </span>
+        <DocDropdown
+          docOptions={docOptions}
+          value={item.document_id}
+          usedIds={usedDocIds}
+          lockedDeptCode={lockedDeptCode}
+          onChange={(id) => onChange({ ...item, document_id: id })}
+        />
+        {canRemove && (
           <button
             type="button"
-            onClick={() => setOpen(!open)}
-            className="flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-700 transition-colors"
+            onClick={onRemove}
+            className="p-1.5 text-slate-300 hover:text-red-500 transition-colors shrink-0"
           >
-            <PlusIcon className="w-3.5 h-3.5" />
-            Tambah dokumen
-            {selectedIds.length > 0 && lockedDeptCode && (
-              <span className="ml-1 text-slate-400 font-normal">
-                (hanya dept{" "}
-                <span className="font-mono font-bold text-slate-600">
-                  {lockedDeptCode}
-                </span>
-                )
-              </span>
-            )}
+            <XMarkIcon className="w-4 h-4" />
           </button>
+        )}
+      </div>
 
-          {open && (
-            <div className="absolute z-20 mt-1 w-full bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden">
-              <div className="p-2 border-b border-slate-100">
-                <div className="relative">
-                  <MagnifyingGlassIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-                  <input
-                    autoFocus
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    placeholder="Cari dokumen..."
-                    className="w-full pl-8 pr-3 py-1.5 text-xs border border-slate-200 rounded-lg outline-none focus:border-blue-400"
-                  />
-                </div>
-              </div>
-              <div className="max-h-48 overflow-y-auto divide-y divide-slate-50">
-                {filtered.length === 0 && (
-                  <p className="px-4 py-3 text-xs text-slate-400 text-center">
-                    {available.length === 0 && lockedDeptCode
-                      ? `Tidak ada dokumen lain dari dept ${lockedDeptCode}`
-                      : "Tidak ditemukan"}
-                  </p>
-                )}
-                {filtered.map((doc) => (
-                  <button
-                    key={doc.id}
-                    type="button"
-                    onClick={() => addDoc(doc.id)}
-                    className="w-full px-4 py-2.5 text-left hover:bg-slate-50 transition-colors"
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <p className="text-xs font-bold text-slate-700">
-                          {doc.doc_number}
-                        </p>
-                        <p className="text-xs text-slate-500 truncate">
-                          {doc.title}
-                        </p>
-                        <p className="text-[10px] text-slate-400 mt-0.5">
-                          Rev. {doc.revision} · {doc.type_name}
-                          {doc.dept_code && (
-                            <span className="font-mono font-bold text-blue-600 ml-1">
-                              · {doc.dept_code}
-                            </span>
-                          )}
-                        </p>
-                      </div>
-                      <PlusIcon className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
+      {/* Override tanggal per dokumen */}
+      <div className="pl-7 flex items-center gap-2">
+        {!hasOverride ? (
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] text-slate-400">
+              Tanggal:{" "}
+              <span className="font-medium text-slate-600">
+                {formatDate(defaultDate)}
+              </span>
+              <span className="text-slate-300"> (sama dengan form)</span>
+            </span>
+            <button
+              type="button"
+              onClick={() => onChange({ ...item, override_date: defaultDate })}
+              className="text-[10px] text-blue-500 hover:text-blue-700 font-medium transition-colors"
+            >
+              Ganti tanggal
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2">
+            <CalendarIcon className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+            <input
+              type="date"
+              value={item.override_date ?? ""}
+              onChange={(e) =>
+                onChange({ ...item, override_date: e.target.value || null })
+              }
+              className="border border-amber-300 rounded-lg px-2 py-1 text-xs outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 transition-all bg-white"
+            />
+            <button
+              type="button"
+              onClick={() => onChange({ ...item, override_date: null })}
+              className="text-[10px] text-slate-400 hover:text-slate-600 font-medium transition-colors"
+            >
+              Reset ke default
+            </button>
+          </div>
+        )}
+      </div>
 
-      {selectedIds.length === 0 && (
-        <p className="text-xs text-slate-400 italic">
-          Belum ada dokumen. Klik "Tambah dokumen" di atas.
-        </p>
-      )}
-
-      <p className="text-[10px] text-slate-400 pl-0.5">
-        Maks. {MAX_DOCS} dokumen per form · semua dokumen harus dari departemen
-        yang sama.
-      </p>
+      {/* Penerima untuk dokumen ini */}
+      <RecipientsInput
+        departments={departments}
+        recipients={item.recipients}
+        onChange={(r) => onChange({ ...item, recipients: r })}
+      />
     </div>
   );
 }
@@ -594,8 +630,6 @@ function FormModal({
   initialFormNumber?: string;
 }) {
   const isEdit = !!defaultValues;
-
-  // [PERBAIKAN 2] Filter departemen DCC saja untuk "Diserahkan Oleh"
   const dccDepartments = departments.filter((d) => d.code === DCC_CODE);
 
   const [formNumber, setFormNumber] = useState(
@@ -607,24 +641,20 @@ function FormModal({
   const [handedByDeptId, setHandedByDeptId] = useState(
     defaultValues?.handed_by_dept?.id ?? ""
   );
-
-  // [PERBAIKAN 1] Recipients sekarang menyimpan { dept_id, qty } per entri
-  const [recipients, setRecipients] = useState<RecipientEntry[]>(
-    defaultValues?.recipients
-      .filter((r) => r.dept?.id)
-      .map((r) => ({
-        dept_id: r.dept!.id,
-        qty: r.qty ?? 1,
-      })) ?? []
+  const [items, setItems] = useState<ItemFormEntry[]>(
+    defaultValues?.items.length
+      ? defaultValues.items.map((item) => ({
+          document_id: item.document?.id ?? "",
+          override_date: item.distributed_date ?? null,
+          recipients: item.recipients
+            .map((r) => ({
+              dept_id: r.dept?.id ?? r.dept_id ?? "",
+              qty: r.qty,
+            }))
+            .filter((r) => r.dept_id),
+        }))
+      : [emptyItem()]
   );
-
-  // Daftar dokumen (1–5), semua harus dari departemen yang sama
-  const [documentIds, setDocumentIds] = useState<string[]>(
-    defaultValues?.items
-      .map((i) => i.document?.id)
-      .filter((id): id is string => !!id) ?? []
-  );
-
   const [notes, setNotes] = useState(defaultValues?.notes ?? "");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -633,6 +663,14 @@ function FormModal({
   const handedByDept = dccDepartments.find((d) => d.id === handedByDeptId);
   const handedByHead = getDeptHead(handedByDept ?? null);
 
+  // Dept code dari dokumen pertama yang sudah dipilih — jadi acuan lock semua dokumen
+  const firstDocId = items.find((i) => i.document_id)?.document_id;
+  const firstDoc = docOptions.find((d) => d.id === firstDocId);
+  const lockedDeptCode = firstDoc?.dept_code ?? null;
+
+  // Semua doc_id yang sudah dipakai
+  const usedDocIds = items.map((i) => i.document_id).filter(Boolean);
+
   async function regenerateFormNumber() {
     setRegenerating(true);
     const next = await fetchNextFormNumber();
@@ -640,27 +678,62 @@ function FormModal({
     setRegenerating(false);
   }
 
+  function addItem() {
+    if (items.length >= MAX_DOCS) return;
+    setItems([...items, emptyItem()]);
+  }
+
+  function updateItem(index: number, val: ItemFormEntry) {
+    const next = [...items];
+    // Jika dokumen pertama diganti, reset dokumen lain yang dept-nya tidak cocok
+    if (index === 0 && val.document_id !== items[0].document_id) {
+      const newDoc = docOptions.find((d) => d.id === val.document_id);
+      const newDeptCode = newDoc?.dept_code ?? null;
+      const resetOthers = next.slice(1).map((item) => {
+        const doc = docOptions.find((d) => d.id === item.document_id);
+        if (doc && newDeptCode && doc.dept_code !== newDeptCode) {
+          return { ...item, document_id: "" };
+        }
+        return item;
+      });
+      setItems([val, ...resetOthers]);
+      return;
+    }
+    next[index] = val;
+    setItems(next);
+  }
+
+  function removeItem(index: number) {
+    const next = items.filter((_, i) => i !== index);
+    setItems(next.length ? next : [emptyItem()]);
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
 
-    if (documentIds.length === 0) {
+    const validItems = items.filter((i) => i.document_id);
+    if (validItems.length === 0) {
       setError("Minimal 1 dokumen harus dipilih.");
       return;
     }
-    if (recipients.length === 0) {
-      setError("Minimal 1 departemen penerima harus dipilih.");
+
+    const itemWithNoRecipient = validItems.find(
+      (i) => i.recipients.length === 0
+    );
+    if (itemWithNoRecipient) {
+      const doc = docOptions.find(
+        (d) => d.id === itemWithNoRecipient.document_id
+      );
+      setError(`Dokumen ${doc?.doc_number ?? ""} belum memiliki penerima.`);
       return;
     }
 
-    // Setiap dokumen mendapat qty = total salinan dari semua penerima
-    const totalQty = recipients.reduce((sum, r) => sum + r.qty, 0);
-    const validItems: DistributionItemInput[] = documentIds.map((id) => ({
-      document_id: id,
-      quantity: totalQty,
+    // Sertakan override_date ke setiap item (null = pakai tanggal form)
+    const itemsWithDate: DistributionItemInput[] = validItems.map((item) => ({
+      ...item,
+      distributed_date: item.override_date ?? null,
     }));
-
-    const recipientIds = recipients.map((r) => r.dept_id);
 
     setLoading(true);
     const result = isEdit
@@ -669,16 +742,14 @@ function FormModal({
           formNumber,
           distributedDate,
           handedByDeptId,
-          validItems,
-          recipientIds,
+          itemsWithDate,
           notes
         )
       : await createDistribution(
           formNumber,
           distributedDate,
           handedByDeptId,
-          validItems,
-          recipientIds,
+          itemsWithDate,
           createdBy,
           notes
         );
@@ -706,7 +777,6 @@ function FormModal({
           </button>
         </div>
 
-        {/* Body */}
         <form
           onSubmit={handleSubmit}
           className="flex flex-col overflow-hidden flex-1"
@@ -761,22 +831,7 @@ function FormModal({
               </div>
             </div>
 
-            {/* Diterima Oleh — PERBAIKAN 1: list + qty per dept */}
-            <div>
-              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
-                Diterima Oleh
-                <span className="ml-1 font-normal text-slate-400 normal-case">
-                  — departemen penerima & jumlah salinan
-                </span>
-              </label>
-              <RecipientsInput
-                departments={departments}
-                recipients={recipients}
-                onChange={setRecipients}
-              />
-            </div>
-
-            {/* Diserahkan Oleh — PERBAIKAN 2: hanya DCC */}
+            {/* Diserahkan Oleh */}
             <div>
               <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
                 Diserahkan Oleh
@@ -814,19 +869,51 @@ function FormModal({
               )}
             </div>
 
-            {/* Daftar Dokumen — 1–5 dok, dept harus sama */}
+            {/* Daftar Dokumen + Penerima per dokumen */}
             <div>
-              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
-                Daftar Dokumen
-                <span className="ml-1 font-normal text-slate-400 normal-case">
-                  — maks. {MAX_DOCS} dokumen, departemen yang sama
-                </span>
-              </label>
-              <DocListInput
-                docOptions={docOptions}
-                selectedIds={documentIds}
-                onChange={setDocumentIds}
-              />
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                  Daftar Dokumen
+                  <span className="ml-1 font-normal text-slate-400 normal-case">
+                    ({items.filter((i) => i.document_id).length}/{MAX_DOCS}) ·
+                    dept yang sama
+                  </span>
+                </label>
+                {lockedDeptCode && (
+                  <span className="text-[10px] bg-blue-50 text-blue-700 font-mono font-bold px-2 py-0.5 rounded-full border border-blue-100">
+                    {lockedDeptCode}
+                  </span>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                {items.map((item, index) => (
+                  <ItemRow
+                    key={index}
+                    index={index}
+                    item={item}
+                    defaultDate={distributedDate}
+                    departments={departments}
+                    docOptions={docOptions}
+                    usedDocIds={usedDocIds}
+                    lockedDeptCode={lockedDeptCode}
+                    onChange={(v) => updateItem(index, v)}
+                    onRemove={() => removeItem(index)}
+                    canRemove={items.length > 1}
+                  />
+                ))}
+              </div>
+
+              {items.length < MAX_DOCS && (
+                <button
+                  type="button"
+                  onClick={addItem}
+                  className="mt-2.5 flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-700 transition-colors"
+                >
+                  <PlusIcon className="w-3.5 h-3.5" />
+                  Tambah dokumen
+                </button>
+              )}
             </div>
 
             {/* Catatan */}
@@ -892,6 +979,7 @@ export default function DistributionsTable({
 }) {
   const [search, setSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
+  const [showFormView, setShowFormView] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [editItem, setEditItem] = useState<Distribution | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Distribution | null>(null);
@@ -899,7 +987,6 @@ export default function DistributionsTable({
   const [deleteError, setDeleteError] = useState("");
   const [nextFormNumber, setNextFormNumber] = useState(initialFormNumber);
 
-  // Refresh nomor form setiap kali modal create dibuka
   useEffect(() => {
     if (showCreate) {
       fetchNextFormNumber().then(setNextFormNumber);
@@ -928,6 +1015,30 @@ export default function DistributionsTable({
     setDeleteLoading(false);
     if (result?.error) setDeleteError(result.error);
     else setDeleteTarget(null);
+  }
+
+  // Kumpulkan tanggal unik dari semua items (override) + tanggal form
+  function getUniqueDates(dist: Distribution): string[] {
+    const base = dist.distributed_date;
+    const overrides = dist.items
+      .map((i) => i.distributed_date)
+      .filter((d): d is string => !!d && d !== base);
+    const all = [base, ...overrides];
+    // dedupe, jaga urutan
+    return Array.from(new Set(all));
+  }
+
+  // Kumpulkan semua dept penerima unik lintas semua items (untuk tampilan tabel ringkas)
+  function getUniqueRecipients(dist: Distribution) {
+    const map = new Map<string, { code: string; name: string }>();
+    dist.items.forEach((item) => {
+      item.recipients.forEach((r) => {
+        if (r.dept && !map.has(r.dept.id)) {
+          map.set(r.dept.id, { code: r.dept.code, name: r.dept.name });
+        }
+      });
+    });
+    return Array.from(map.values());
   }
 
   return (
@@ -962,6 +1073,13 @@ export default function DistributionsTable({
           />
         </div>
         <button
+          onClick={() => setShowFormView(true)}
+          className="flex items-center justify-center gap-2 bg-white border border-slate-200 text-slate-700 px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-slate-50 transition-all shrink-0"
+        >
+          <EyeIcon className="w-4 h-4" />
+          Lihat Form
+        </button>
+        <button
           onClick={() => {
             setShowCreate(true);
             setEditItem(null);
@@ -995,10 +1113,10 @@ export default function DistributionsTable({
                   Diserahkan Oleh
                 </th>
                 <th className="text-left px-6 py-3 text-[11px] font-bold text-slate-400 uppercase tracking-widest">
-                  Diterima Oleh
+                  Dokumen
                 </th>
                 <th className="text-left px-6 py-3 text-[11px] font-bold text-slate-400 uppercase tracking-widest">
-                  Dokumen
+                  Penerima
                 </th>
                 <th className="text-right px-6 py-3 text-[11px] font-bold text-slate-400 uppercase tracking-widest">
                   Aksi
@@ -1018,6 +1136,7 @@ export default function DistributionsTable({
               )}
               {paginated.map((dist) => {
                 const handedHead = getDeptHead(dist.handed_by_dept);
+                const uniqueRecipients = getUniqueRecipients(dist);
                 return (
                   <tr
                     key={dist.id}
@@ -1029,10 +1148,28 @@ export default function DistributionsTable({
                       </span>
                     </td>
                     <td className="px-6 py-4 text-sm text-slate-600">
-                      <div className="flex items-center gap-1.5">
-                        <CalendarIcon className="w-3.5 h-3.5 text-slate-400" />
-                        {formatDate(dist.distributed_date)}
-                      </div>
+                      {(() => {
+                        const dates = getUniqueDates(dist);
+                        return (
+                          <div className="space-y-0.5">
+                            <div className="flex items-center gap-1.5">
+                              <CalendarIcon className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                              <span>{formatDate(dist.distributed_date)}</span>
+                            </div>
+                            {dates.slice(1).map((d) => (
+                              <div
+                                key={d}
+                                className="flex items-center gap-1.5 pl-0.5"
+                              >
+                                <CalendarIcon className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                                <span className="text-amber-600 text-xs">
+                                  {formatDate(d)}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      })()}
                     </td>
                     <td className="px-6 py-4">
                       {dist.handed_by_dept ? (
@@ -1052,27 +1189,6 @@ export default function DistributionsTable({
                       ) : (
                         <span className="text-xs text-slate-300">-</span>
                       )}
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex flex-wrap gap-1">
-                        {dist.recipients.map((r) =>
-                          r.dept ? (
-                            <span
-                              key={r.id}
-                              className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-100 text-slate-600 text-xs font-medium rounded-full"
-                              title={`${r.dept.code} - ${r.dept.name}${
-                                r.qty ? ` · ${r.qty} salinan` : ""
-                              }`}
-                            >
-                              <BuildingOfficeIcon className="w-3 h-3" />
-                              {r.dept.code}
-                              {r.qty && (
-                                <span className="text-slate-400">×{r.qty}</span>
-                              )}
-                            </span>
-                          ) : null
-                        )}
-                      </div>
                     </td>
                     <td className="px-6 py-4">
                       {dist.items.length > 0 ? (
@@ -1096,6 +1212,25 @@ export default function DistributionsTable({
                       ) : (
                         <span className="text-xs text-slate-300">-</span>
                       )}
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex flex-wrap gap-1">
+                        {uniqueRecipients.slice(0, 4).map((r) => (
+                          <span
+                            key={r.code}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-100 text-slate-600 text-xs font-medium rounded-full"
+                            title={`${r.code} - ${r.name}`}
+                          >
+                            <BuildingOfficeIcon className="w-3 h-3" />
+                            {r.code}
+                          </span>
+                        ))}
+                        {uniqueRecipients.length > 4 && (
+                          <span className="px-2 py-0.5 bg-slate-100 text-slate-400 text-xs rounded-full">
+                            +{uniqueRecipients.length - 4}
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex justify-end gap-2">
@@ -1141,6 +1276,7 @@ export default function DistributionsTable({
         )}
         {paginated.map((dist) => {
           const handedHead = getDeptHead(dist.handed_by_dept);
+          const uniqueRecipients = getUniqueRecipients(dist);
           return (
             <div
               key={dist.id}
@@ -1151,10 +1287,28 @@ export default function DistributionsTable({
                   <span className="font-mono text-xs font-bold bg-blue-50 text-blue-700 px-2 py-0.5 rounded-md border border-blue-100">
                     {dist.form_number}
                   </span>
-                  <p className="text-xs text-slate-400 mt-1.5 flex items-center gap-1">
-                    <CalendarIcon className="w-3 h-3" />
-                    {formatDate(dist.distributed_date)}
-                  </p>
+                  <div className="mt-1.5 space-y-0.5">
+                    {(() => {
+                      const dates = getUniqueDates(dist);
+                      return (
+                        <>
+                          <p className="text-xs text-slate-400 flex items-center gap-1">
+                            <CalendarIcon className="w-3 h-3 shrink-0" />
+                            {formatDate(dist.distributed_date)}
+                          </p>
+                          {dates.slice(1).map((d) => (
+                            <p
+                              key={d}
+                              className="text-xs text-amber-500 flex items-center gap-1"
+                            >
+                              <CalendarIcon className="w-3 h-3 shrink-0" />
+                              {formatDate(d)}
+                            </p>
+                          ))}
+                        </>
+                      );
+                    })()}
+                  </div>
                   {dist.handed_by_dept && (
                     <p className="text-xs text-slate-600 mt-1">
                       Dari:{" "}
@@ -1170,18 +1324,18 @@ export default function DistributionsTable({
                     </p>
                   )}
                   <div className="flex flex-wrap gap-1 mt-1.5">
-                    {dist.recipients.map((r) =>
-                      r.dept ? (
-                        <span
-                          key={r.id}
-                          className="px-2 py-0.5 bg-slate-100 text-slate-600 text-[10px] font-medium rounded-full"
-                        >
-                          {r.dept.code}
-                          {r.qty && (
-                            <span className="text-slate-400"> ×{r.qty}</span>
-                          )}
-                        </span>
-                      ) : null
+                    {uniqueRecipients.slice(0, 4).map((r) => (
+                      <span
+                        key={r.code}
+                        className="px-2 py-0.5 bg-slate-100 text-slate-600 text-[10px] font-medium rounded-full"
+                      >
+                        {r.code}
+                      </span>
+                    ))}
+                    {uniqueRecipients.length > 4 && (
+                      <span className="px-2 py-0.5 bg-slate-100 text-slate-400 text-[10px] rounded-full">
+                        +{uniqueRecipients.length - 4}
+                      </span>
                     )}
                   </div>
                   {dist.items.length > 0 && (
@@ -1266,6 +1420,14 @@ export default function DistributionsTable({
           onConfirm={handleDelete}
           onCancel={() => setDeleteTarget(null)}
           loading={deleteLoading}
+        />
+      )}
+
+      {/* View Format Form */}
+      {showFormView && (
+        <DistributionSpreadsheetView
+          distributions={distributions}
+          onClose={() => setShowFormView(false)}
         />
       )}
     </div>

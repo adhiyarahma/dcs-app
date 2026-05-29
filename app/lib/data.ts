@@ -268,12 +268,12 @@ export async function getDistributions() {
       ),
       users(name),
       distribution_items(
-        id, quantity,
-        documents(id, doc_number, title, revision)
-      ),
-      distribution_recipients(
-        id,
-        departments(id, code, name, department_heads(name, title))
+        id, distributed_date,
+        documents(id, doc_number, title, revision, document_types(name)),
+        distribution_recipients(
+          id, qty,
+          departments(id, code, name, department_heads(name, title))
+        )
       )
     `
     )
@@ -286,20 +286,25 @@ export async function getDistributions() {
     notes: d.notes,
     created_at: d.created_at,
     handed_by_dept: d.departments
-      ? {
-          ...d.departments,
-          heads: d.departments.department_heads,
-        }
+      ? { ...d.departments, heads: d.departments.department_heads }
       : null,
     created_by_name: d.users?.name ?? "",
     items: (d.distribution_items ?? []).map((item: any) => ({
       id: item.id,
-      quantity: item.quantity,
-      document: item.documents ?? null,
-    })),
-    recipients: (d.distribution_recipients ?? []).map((r: any) => ({
-      id: r.id,
-      dept: r.departments ?? null,
+      distributed_date: item.distributed_date ?? null,
+      document: item.documents
+        ? {
+            ...item.documents,
+            type_name: item.documents.document_types?.name ?? "",
+          }
+        : null,
+      recipients: (item.distribution_recipients ?? []).map((r: any) => ({
+        id: r.id,
+        qty: r.qty,
+        dept: r.departments
+          ? { ...r.departments, heads: r.departments.department_heads }
+          : null,
+      })),
     })),
   }));
 }
@@ -311,17 +316,16 @@ export async function getDistributionById(id: string) {
       `
       id, form_number, distributed_date, handed_by_dept_id, notes, created_at,
       departments!distributions_handed_by_dept_id_fkey(
-        id, code, name, 
-        department_heads(name, title)
+        id, code, name, department_heads(name, title)
       ),
       users(name),
       distribution_items(
-        id, quantity,
-        documents(id, doc_number, title, revision)
-      ),
-      distribution_recipients(
-        id, dept_id,
-        departments(id, code, name, department_heads(name, title))
+        id, distributed_date,
+        documents(id, doc_number, title, revision, document_types(name)),
+        distribution_recipients(
+          id, qty, dept_id,
+          departments(id, code, name, department_heads(name, title))
+        )
       )
     `
     )
@@ -341,13 +345,19 @@ export async function getDistributionById(id: string) {
     created_by_name: (data as any).users?.name ?? "",
     items: ((data as any).distribution_items ?? []).map((item: any) => ({
       id: item.id,
-      quantity: item.quantity,
-      document: item.documents ?? null,
-    })),
-    recipients: ((data as any).distribution_recipients ?? []).map((r: any) => ({
-      id: r.id,
-      dept_id: r.dept_id,
-      dept: r.departments ?? null,
+      distributed_date: item.distributed_date ?? null,
+      document: item.documents
+        ? {
+            ...item.documents,
+            type_name: item.documents.document_types?.name ?? "",
+          }
+        : null,
+      recipients: (item.distribution_recipients ?? []).map((r: any) => ({
+        id: r.id,
+        qty: r.qty,
+        dept_id: r.dept_id,
+        dept: r.departments ?? null,
+      })),
     })),
   };
 }
