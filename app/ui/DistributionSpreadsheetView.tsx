@@ -68,6 +68,14 @@ function splitLines(text: string, maxChars: number): string[] {
   return lines.length ? lines : [""];
 }
 
+// ─── Constants ────────────────────────────────────────────────────────────────
+// A4 landscape usable height (px) setelah dikurangi header, thead, footer
+const A4_BODY_PX = 640;
+// Minimum rows yang selalu ditampilkan
+const MIN_ROWS = 45;
+// Maximum rows sebelum font dikecilkan otomatis
+const MAX_ROWS = 35;
+
 // ─── Build iframe HTML ────────────────────────────────────────────────────────
 function buildIframeHTML(dist: Distribution): string {
   const handedByHead = getDeptHead(dist.handed_by_dept);
@@ -75,7 +83,7 @@ function buildIframeHTML(dist: Distribution): string {
   const handedByDeptCode = dist.handed_by_dept?.code ?? "";
 
   const NCOLS = 18;
-  const rows: string[][] = [];
+  const dataRows: string[][] = [];
 
   dist.items.forEach((item, itemIdx) => {
     const effectiveDate = item.distributed_date ?? dist.distributed_date;
@@ -89,20 +97,22 @@ function buildIframeHTML(dist: Distribution): string {
     const docTitle = doc?.title ?? "";
     const docNumber = doc?.doc_number ? `(${doc.doc_number})` : "";
     const docRevision = String(doc?.revision ?? "").padStart(2, "0");
-    const titleLines = splitLines(docTitle, 36);
+    const titleLines = splitLines(docTitle, 34);
+    // docLines: baris 0=jenis, 1..n=judul, n+1=nomor
     const docLines = [docTypeName, ...titleLines, docNumber];
 
-    const totalRows = Math.max(recips.length * 2, docLines.length);
+    const totalRecipRows = recips.length * 2; // setiap penerima = 2 baris
+    const totalRows = Math.max(totalRecipRows, docLines.length);
 
     for (let ri = 0; ri < totalRows; ri++) {
       const row = Array(NCOLS).fill("");
       const recipIdx = Math.floor(ri / 2);
       const isRecipRow = ri % 2 === 0 && recipIdx < recips.length;
+      const isFirst = ri === 0;
 
       if (isRecipRow) {
         const r = recips[recipIdx];
         const head = r ? getDeptHead(r.dept) : null;
-        const isFirst = recipIdx === 0;
         row[0] = isFirst ? String(itemIdx + 1) : "";
         row[1] = isFirst ? formatDate(effectiveDate) : "";
         row[2] = head?.name ?? "";
@@ -110,37 +120,49 @@ function buildIframeHTML(dist: Distribution): string {
         row[5] = isFirst ? handedByName : "";
         row[6] = isFirst ? handedByDeptCode : "";
         row[17] = r?.qty != null ? String(r.qty) : "";
+      } else if (isFirst) {
+        row[0] = String(itemIdx + 1);
+        row[1] = formatDate(effectiveDate);
+        row[5] = handedByName;
+        row[6] = handedByDeptCode;
       }
 
       row[15] = docLines[ri] ?? "";
       if (ri === 0) row[16] = docRevision;
 
-      rows.push(row);
+      dataRows.push(row);
     }
 
-    // separator baris kosong antar item
-    rows.push(Array(NCOLS).fill(""));
+    // 1 baris kosong separator antar item
+    dataRows.push(Array(NCOLS).fill(""));
   });
 
-  while (rows.length < 25) rows.push(Array(NCOLS).fill(""));
+  // Pad / trim ke MIN_ROWS minimal
+  while (dataRows.length < MIN_ROWS) dataRows.push(Array(NCOLS).fill(""));
 
-  // col widths: 18 kolom
+  // Total rows yang akan dirender
+  const totalRows = Math.max(dataRows.length, MIN_ROWS);
+
+  // Row height dinamis: bagi rata ruang yang tersedia
+  const rowH = Math.max(13, Math.floor(A4_BODY_PX / totalRows));
+  // Font size menyesuaikan row height
+  const fontSize = rowH >= 18 ? 9 : rowH >= 15 ? 8.5 : 8;
+
+  // col widths: total harus ~990px (A4 landscape usable setelah padding card)
   const colWidths = [
-    22, 50, 62, 36, 46, 62, 36, 22, 50, 62, 36, 46, 62, 36, 46, 220, 40, 36,
+    22, 50, 64, 38, 48, 64, 38, 22, 50, 64, 38, 48, 64, 38, 48, 218, 40, 36,
   ];
   const cols = colWidths.map((w) => `<col style="width:${w}px">`).join("");
-  const totalWidth = colWidths.reduce((a, b) => a + b, 0);
+  const totalWidth = colWidths.reduce((a, b) => a + b, 0); // ~990
 
-  const th = `border:1px solid #000;font-size:8.5px;font-weight:700;text-align:center;vertical-align:middle;padding:1px 2px;color:#000;background:#fff;white-space:normal;overflow:hidden;line-height:1.2;`;
-  const td = `border:1px solid #000;font-size:8.5px;text-align:center;vertical-align:middle;padding:0 2px;height:14px;color:#000;overflow:hidden;word-break:break-word;white-space:normal;line-height:1.2;`;
+  const th = `border:1px solid #000;font-size:${fontSize}px;font-weight:700;text-align:center;vertical-align:middle;padding:1px 2px;color:#000;background:#fff;white-space:normal;overflow:hidden;line-height:1.2;`;
+  const td = `border:1px solid #000;font-size:${fontSize}px;text-align:center;vertical-align:middle;padding:0 2px;height:${rowH}px;color:#000;overflow:hidden;word-break:break-word;white-space:normal;line-height:1.2;`;
 
-  const bodyRows = rows
+  const bodyRows = dataRows
     .map(
       (row) =>
         `<tr>${row
-          .map((val, ci) => {
-            return `<td style="${td}" contenteditable="true">${val}</td>`;
-          })
+          .map((val) => `<td style="${td}" contenteditable="true">${val}</td>`)
           .join("")}</tr>`
     )
     .join("\n");
@@ -153,11 +175,7 @@ function buildIframeHTML(dist: Distribution): string {
   * { margin:0; padding:0; box-sizing:border-box; }
   body { font-family:Arial,sans-serif; background:#fff; color:#000; }
   #wrap { display:flex; justify-content:center; padding:0 0 12px; }
-  #card {
-    border:2px solid #000;
-    width:${totalWidth + 20}px;
-    padding:5px;
-  }
+  #card { border:1px solid #000; width:${totalWidth + 16}px; padding:5px; }
   #table-wrap { border:1px solid #000; overflow:hidden; }
   #card-header { text-align:center; padding:4px 8px 3px; }
   #card-header .co { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; }
@@ -166,19 +184,29 @@ function buildIframeHTML(dist: Distribution): string {
   table { border-collapse:collapse; table-layout:fixed; width:100%; }
   td[contenteditable]:focus { outline:2px solid #4a90d9; background:#f0f6ff !important; }
   #card-footer { text-align:right; padding:2px 2px 0; font-size:8px; font-family:monospace; color:#555; }
+
   @media print {
-    @page { size:A4 landscape; margin:6mm; }
+    @page { size:A4 landscape; margin:5mm; }
     body { background:#fff !important; }
     #wrap { padding:0 !important; }
     #card {
-      border:2px solid #000 !important;
+      border:1px solid #000 !important;
       width:100% !important;
       padding:3px !important;
+      height: calc(100vh - 10mm);
       page-break-inside:avoid;
       break-inside:avoid;
+      display:flex;
+      flex-direction:column;
     }
-    #table-wrap { border:1px solid #000 !important; }
+    #table-wrap {
+      border:1px solid #000 !important;
+      flex:1;
+      overflow:hidden;
+    }
+    table { height:100%; }
     td, th { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+    td[contenteditable]:focus { outline:none !important; background:#fff !important; }
   }
 </style>
 </head>
@@ -190,35 +218,37 @@ function buildIframeHTML(dist: Distribution): string {
       <div class="sub">Bukti Pendistribusian Dokumen / Penarikan Dokumen</div>
       <div class="nom">Nomor : ${dist.form_number}</div>
     </div>
-    <div id="table-wrap"><table id="tbl">
-      <colgroup>${cols}</colgroup>
-      <thead>
-        <tr>
-          <th colspan="7" style="${th}">Bukti Pendistribusian Dokumen</th>
-          <th colspan="8" style="${th}">Bukti Penarikan Dokumen</th>
-          <th rowspan="3" style="${th}">Nama Dokumen</th>
-          <th rowspan="3" style="${th}">Nomor Revisi</th>
-          <th rowspan="3" style="${th}">Jumlah</th>
-        </tr>
-        <tr>
-          <th rowspan="2" style="${th}">No</th>
-          <th rowspan="2" style="${th}">Tanggal</th>
-          <th colspan="3" style="${th}">Diterima Oleh:</th>
-          <th colspan="2" style="${th}">Diserahkan Oleh:</th>
-          <th rowspan="2" style="${th}">No</th>
-          <th rowspan="2" style="${th}">Tanggal</th>
-          <th colspan="3" style="${th}">Diterima Oleh:</th>
-          <th colspan="3" style="${th}">Diserahkan Oleh:</th>
-        </tr>
-        <tr>
-          <th style="${th}">Nama</th><th style="${th}">Bagian</th><th style="${th}">Tanda<br>Tangan</th>
-          <th style="${th}">Nama</th><th style="${th}">Bagian</th>
-          <th style="${th}">Nama</th><th style="${th}">Bagian</th><th style="${th}">Tanda<br>Tangan</th>
-          <th style="${th}">Nama</th><th style="${th}">Bagian</th><th style="${th}">Tanda<br>Tangan</th>
-        </tr>
-      </thead>
-      <tbody>${bodyRows}</tbody>
-    </table></div>
+    <div id="table-wrap">
+      <table id="tbl">
+        <colgroup>${cols}</colgroup>
+        <thead>
+          <tr>
+            <th colspan="7" style="${th}">Bukti Pendistribusian Dokumen</th>
+            <th colspan="8" style="${th}">Bukti Penarikan Dokumen</th>
+            <th rowspan="3" style="${th}">Nama Dokumen</th>
+            <th rowspan="3" style="${th}">Nomor Revisi</th>
+            <th rowspan="3" style="${th}">Jumlah</th>
+          </tr>
+          <tr>
+            <th rowspan="2" style="${th}">No</th>
+            <th rowspan="2" style="${th}">Tanggal</th>
+            <th colspan="3" style="${th}">Diterima Oleh:</th>
+            <th colspan="2" style="${th}">Diserahkan Oleh:</th>
+            <th rowspan="2" style="${th}">No</th>
+            <th rowspan="2" style="${th}">Tanggal</th>
+            <th colspan="3" style="${th}">Diterima Oleh:</th>
+            <th colspan="3" style="${th}">Diserahkan Oleh:</th>
+          </tr>
+          <tr>
+            <th style="${th}">Nama</th><th style="${th}">Bagian</th><th style="${th}">Tanda<br>Tangan</th>
+            <th style="${th}">Nama</th><th style="${th}">Bagian</th>
+            <th style="${th}">Nama</th><th style="${th}">Bagian</th><th style="${th}">Tanda<br>Tangan</th>
+            <th style="${th}">Nama</th><th style="${th}">Bagian</th><th style="${th}">Tanda<br>Tangan</th>
+          </tr>
+        </thead>
+        <tbody>${bodyRows}</tbody>
+      </table>
+    </div>
     <div id="card-footer">FL-MRP-002, REV 01</div>
   </div>
 </div>
@@ -240,17 +270,9 @@ window.printForm = function() { window.print(); }
 }
 
 // ─── Single Form Card ─────────────────────────────────────────────────────────
-function SpreadsheetFormCard({
-  dist,
-  onPrint,
-  onCopy,
-}: {
-  dist: Distribution;
-  onPrint: () => void;
-  onCopy: () => void;
-}) {
+function SpreadsheetFormCard({ dist }: { dist: Distribution }) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
-  const [height, setHeight] = useState(700);
+  const [height, setHeight] = useState(600);
 
   useEffect(() => {
     const iframe = iframeRef.current;
@@ -258,7 +280,7 @@ function SpreadsheetFormCard({
     iframe.srcdoc = buildIframeHTML(dist);
     const onLoad = () => {
       try {
-        const h = iframe.contentDocument?.body?.scrollHeight ?? 700;
+        const h = iframe.contentDocument?.body?.scrollHeight ?? 600;
         setHeight(h + 16);
       } catch {}
     };
@@ -275,7 +297,6 @@ function SpreadsheetFormCard({
 
   return (
     <div className="mb-8">
-      {/* Tombol di atas card */}
       <div className="flex items-center justify-between mb-2 px-1">
         <span className="text-xs font-semibold text-gray-600">
           {dist.form_number}
@@ -297,15 +318,13 @@ function SpreadsheetFormCard({
           </button>
         </div>
       </div>
-
-      {/* Card */}
       <div className="bg-white border border-gray-200 shadow-sm overflow-x-auto">
         <iframe
           ref={iframeRef}
           sandbox="allow-scripts allow-same-origin allow-modals"
           style={{
             width: "100%",
-            minWidth: "1060px",
+            minWidth: "1020px",
             height: `${height}px`,
             border: "none",
             display: "block",
@@ -339,7 +358,6 @@ export default function DistributionSpreadsheetView({
 
   return (
     <div className="fixed inset-0 z-50 bg-gray-50 flex flex-col">
-      {/* Top Bar */}
       <div className="bg-white border-b border-gray-200 px-5 py-3 flex items-center justify-between shrink-0 shadow-sm">
         <div className="flex items-center gap-3">
           <button
@@ -369,7 +387,6 @@ export default function DistributionSpreadsheetView({
         </div>
       </div>
 
-      {/* Scroll Area */}
       <div className="flex-1 overflow-y-auto px-6 py-6">
         {filtered.length === 0 ? (
           <div className="flex items-center justify-center h-40 text-gray-400 text-sm">
@@ -377,12 +394,7 @@ export default function DistributionSpreadsheetView({
           </div>
         ) : (
           filtered.map((dist) => (
-            <SpreadsheetFormCard
-              key={dist.id}
-              dist={dist}
-              onPrint={() => {}}
-              onCopy={() => {}}
-            />
+            <SpreadsheetFormCard key={dist.id} dist={dist} />
           ))
         )}
       </div>

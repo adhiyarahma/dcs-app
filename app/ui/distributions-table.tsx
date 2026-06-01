@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import clsx from "clsx";
 import {
   PlusIcon,
@@ -17,8 +17,10 @@ import {
   ChevronDownIcon,
   ArrowPathIcon,
   EyeIcon,
+  ArrowUpTrayIcon,
 } from "@heroicons/react/24/outline";
 import DistributionSpreadsheetView from "./DistributionSpreadsheetView";
+import ImportDistributionModal from "./ImportDistributionModal";
 import {
   createDistribution,
   updateDistribution,
@@ -56,7 +58,7 @@ type DistRecipient = {
 
 type DistItem = {
   id: string;
-  distributed_date?: string | null; // override tanggal per dokumen
+  distributed_date?: string | null;
   document: {
     id: string;
     doc_number: string;
@@ -77,10 +79,9 @@ type Distribution = {
   items: DistItem[];
 };
 
-// State form per item (dokumen + penerima + tanggal override opsional)
 type ItemFormEntry = {
   document_id: string;
-  override_date: string | null; // null = pakai tanggal form
+  override_date: string | null;
   recipients: DistributionRecipientInput[];
 };
 
@@ -501,7 +502,7 @@ function RecipientsInput({
   );
 }
 
-// ─── Item Row (satu dokumen + penerimanya) ────────────────────────────────────
+// ─── Item Row ─────────────────────────────────────────────────────────────────
 function ItemRow({
   index,
   item,
@@ -516,7 +517,7 @@ function ItemRow({
 }: {
   index: number;
   item: ItemFormEntry;
-  defaultDate: string; // tanggal form — jadi default
+  defaultDate: string;
   departments: Dept[];
   docOptions: DocOption[];
   usedDocIds: string[];
@@ -526,7 +527,6 @@ function ItemRow({
   canRemove: boolean;
 }) {
   const hasOverride = item.override_date !== null && item.override_date !== "";
-  const effectiveDate = hasOverride ? item.override_date! : defaultDate;
 
   return (
     <div
@@ -537,7 +537,6 @@ function ItemRow({
           : "bg-slate-50 border-slate-200"
       )}
     >
-      {/* Header row: nomor + pilih dokumen + hapus */}
       <div className="flex items-center gap-2">
         <span className="text-[10px] font-bold text-slate-400 w-5 shrink-0 text-center">
           {index + 1}
@@ -560,7 +559,6 @@ function ItemRow({
         )}
       </div>
 
-      {/* Override tanggal per dokumen */}
       <div className="pl-7 flex items-center gap-2">
         {!hasOverride ? (
           <div className="flex items-center gap-2">
@@ -601,7 +599,6 @@ function ItemRow({
         )}
       </div>
 
-      {/* Penerima untuk dokumen ini */}
       <RecipientsInput
         departments={departments}
         recipients={item.recipients}
@@ -663,12 +660,10 @@ function FormModal({
   const handedByDept = dccDepartments.find((d) => d.id === handedByDeptId);
   const handedByHead = getDeptHead(handedByDept ?? null);
 
-  // Dept code dari dokumen pertama yang sudah dipilih — jadi acuan lock semua dokumen
   const firstDocId = items.find((i) => i.document_id)?.document_id;
   const firstDoc = docOptions.find((d) => d.id === firstDocId);
   const lockedDeptCode = firstDoc?.dept_code ?? null;
 
-  // Semua doc_id yang sudah dipakai
   const usedDocIds = items.map((i) => i.document_id).filter(Boolean);
 
   async function regenerateFormNumber() {
@@ -685,7 +680,6 @@ function FormModal({
 
   function updateItem(index: number, val: ItemFormEntry) {
     const next = [...items];
-    // Jika dokumen pertama diganti, reset dokumen lain yang dept-nya tidak cocok
     if (index === 0 && val.document_id !== items[0].document_id) {
       const newDoc = docOptions.find((d) => d.id === val.document_id);
       const newDeptCode = newDoc?.dept_code ?? null;
@@ -729,7 +723,6 @@ function FormModal({
       return;
     }
 
-    // Sertakan override_date ke setiap item (null = pakai tanggal form)
     const itemsWithDate: DistributionItemInput[] = validItems.map((item) => ({
       ...item,
       distributed_date: item.override_date ?? null,
@@ -869,7 +862,7 @@ function FormModal({
               )}
             </div>
 
-            {/* Daftar Dokumen + Penerima per dokumen */}
+            {/* Daftar Dokumen */}
             <div>
               <div className="flex items-center justify-between mb-2">
                 <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
@@ -963,6 +956,58 @@ function FormModal({
   );
 }
 
+// ─── Year Tabs ────────────────────────────────────────────────────────────────
+function YearTabs({
+  years,
+  activeYear,
+  distributions,
+  onSelect,
+}: {
+  years: string[];
+  activeYear: string;
+  distributions: Distribution[];
+  onSelect: (year: string) => void;
+}) {
+  if (years.length === 0) return null;
+
+  return (
+    <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+      <div className="flex overflow-x-auto scrollbar-hide border-b border-slate-100 px-2 pt-1">
+        {years.map((year) => {
+          const count = distributions.filter((d) =>
+            d.distributed_date.startsWith(year)
+          ).length;
+          const isActive = year === activeYear;
+          return (
+            <button
+              key={year}
+              onClick={() => onSelect(year)}
+              className={clsx(
+                "relative flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-all whitespace-nowrap shrink-0 -mb-px",
+                isActive
+                  ? "border-slate-900 text-slate-900"
+                  : "border-transparent text-slate-400 hover:text-slate-600 hover:border-slate-300"
+              )}
+            >
+              {year}
+              <span
+                className={clsx(
+                  "text-[11px] px-1.5 py-0.5 rounded-full font-semibold transition-all",
+                  isActive
+                    ? "bg-slate-900 text-white"
+                    : "bg-slate-100 text-slate-500"
+                )}
+              >
+                {count}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function DistributionsTable({
   distributions,
@@ -980,6 +1025,7 @@ export default function DistributionsTable({
   const [search, setSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [showFormView, setShowFormView] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [editItem, setEditItem] = useState<Distribution | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Distribution | null>(null);
@@ -987,20 +1033,54 @@ export default function DistributionsTable({
   const [deleteError, setDeleteError] = useState("");
   const [nextFormNumber, setNextFormNumber] = useState(initialFormNumber);
 
+  // ─── Year tab state ───────────────────────────────────────────────────────
+  const years = useMemo(
+    () =>
+      [
+        ...new Set(
+          distributions.map((d) => d.distributed_date.slice(0, 4))
+        ),
+      ].sort((a, b) => Number(b) - Number(a)),
+    [distributions]
+  );
+
+  const currentYear = new Date().getFullYear().toString();
+  const [activeYear, setActiveYear] = useState<string>(
+    () => years.find((y) => y === currentYear) ?? years[0] ?? currentYear
+  );
+
+  // Sync activeYear jika years berubah (misal setelah mutasi data)
+  useEffect(() => {
+    if (years.length > 0 && !years.includes(activeYear)) {
+      setActiveYear(years[0]);
+    }
+  }, [years, activeYear]);
+
+  function handleYearSelect(year: string) {
+    setActiveYear(year);
+    setCurrentPage(1);
+    setSearch("");
+  }
+
+  // ─── Fetch form number saat modal create dibuka ───────────────────────────
   useEffect(() => {
     if (showCreate) {
       fetchNextFormNumber().then(setNextFormNumber);
     }
   }, [showCreate]);
 
-  const filtered = distributions.filter(
-    (d) =>
-      d.form_number.toLowerCase().includes(search.toLowerCase()) ||
-      (d.handed_by_dept?.name.toLowerCase().includes(search.toLowerCase()) ??
-        false) ||
-      (d.handed_by_dept?.code.toLowerCase().includes(search.toLowerCase()) ??
-        false)
-  );
+  // ─── Filter: tahun aktif + search ────────────────────────────────────────
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase();
+    return distributions
+      .filter((d) => d.distributed_date.startsWith(activeYear))
+      .filter(
+        (d) =>
+          d.form_number.toLowerCase().includes(q) ||
+          (d.handed_by_dept?.name.toLowerCase().includes(q) ?? false) ||
+          (d.handed_by_dept?.code.toLowerCase().includes(q) ?? false)
+      );
+  }, [distributions, activeYear, search]);
 
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
   const paginated = filtered.slice(
@@ -1017,18 +1097,14 @@ export default function DistributionsTable({
     else setDeleteTarget(null);
   }
 
-  // Kumpulkan tanggal unik dari semua items (override) + tanggal form
   function getUniqueDates(dist: Distribution): string[] {
     const base = dist.distributed_date;
     const overrides = dist.items
       .map((i) => i.distributed_date)
       .filter((d): d is string => !!d && d !== base);
-    const all = [base, ...overrides];
-    // dedupe, jaga urutan
-    return Array.from(new Set(all));
+    return Array.from(new Set([base, ...overrides]));
   }
 
-  // Kumpulkan semua dept penerima unik lintas semua items (untuk tampilan tabel ringkas)
   function getUniqueRecipients(dist: Distribution) {
     const map = new Map<string, { code: string; name: string }>();
     dist.items.forEach((item) => {
@@ -1058,13 +1134,22 @@ export default function DistributionsTable({
         </div>
       </div>
 
+      {/* ─── Year Tabs ─────────────────────────────────────────────────────── */}
+      <YearTabs
+        years={years}
+        activeYear={activeYear}
+        distributions={distributions}
+        onSelect={handleYearSelect}
+      />
+
       {/* Toolbar */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
         <div className="relative flex-1">
           <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <input
             type="text"
-            placeholder="Cari nomor form atau departemen..."
+            value={search}
+            placeholder={`Cari form di tahun ${activeYear}...`}
             className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all"
             onChange={(e) => {
               setSearch(e.target.value);
@@ -1078,6 +1163,13 @@ export default function DistributionsTable({
         >
           <EyeIcon className="w-4 h-4" />
           Lihat Form
+        </button>
+        <button
+          onClick={() => setShowImport(true)}
+          className="flex items-center justify-center gap-2 bg-white border border-slate-200 text-slate-700 px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-slate-50 transition-all shrink-0"
+        >
+          <ArrowUpTrayIcon className="w-4 h-4" />
+          Import Excel
         </button>
         <button
           onClick={() => {
@@ -1128,9 +1220,11 @@ export default function DistributionsTable({
                 <tr>
                   <td
                     colSpan={6}
-                    className="px-6 py-10 text-center text-slate-400 text-sm"
+                    className="px-6 py-12 text-center text-slate-400 text-sm"
                   >
-                    Tidak ada data ditemukan.
+                    {search
+                      ? `Tidak ada form yang cocok dengan pencarian "${search}" di tahun ${activeYear}.`
+                      : `Belum ada form distribusi di tahun ${activeYear}.`}
                   </td>
                 </tr>
               )}
@@ -1271,7 +1365,9 @@ export default function DistributionsTable({
       <div className="sm:hidden space-y-2">
         {paginated.length === 0 && (
           <div className="bg-white border border-slate-200 rounded-2xl p-6 text-center text-slate-400 text-sm">
-            Tidak ada data ditemukan.
+            {search
+              ? `Tidak ada form yang cocok dengan pencarian "${search}" di tahun ${activeYear}.`
+              : `Belum ada form distribusi di tahun ${activeYear}.`}
           </div>
         )}
         {paginated.map((dist) => {
@@ -1428,6 +1524,16 @@ export default function DistributionsTable({
         <DistributionSpreadsheetView
           distributions={distributions}
           onClose={() => setShowFormView(false)}
+        />
+      )}
+
+      {/* Modal Import Excel */}
+      {showImport && (
+        <ImportDistributionModal
+          onClose={() => setShowImport(false)}
+          departments={departments}
+          docOptions={docOptions}
+          currentUserId={currentUserId}
         />
       )}
     </div>
