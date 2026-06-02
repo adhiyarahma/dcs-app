@@ -1037,9 +1037,7 @@ export default function DistributionsTable({
   const years = useMemo(
     () =>
       [
-        ...new Set(
-          distributions.map((d) => d.distributed_date.slice(0, 4))
-        ),
+        ...new Set(distributions.map((d) => d.distributed_date.slice(0, 4))),
       ].sort((a, b) => Number(b) - Number(a)),
     [distributions]
   );
