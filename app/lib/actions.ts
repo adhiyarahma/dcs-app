@@ -931,6 +931,14 @@ export async function parseImportData(
               message: `Departemen "${deptRaw}" tidak ditemukan`,
             });
         }
+        // ── TAMBAHAN: baca revisi dari kolom "Revisi" ──
+        const revisiRaw = String(raw["Rev"] ?? "").trim();
+        if (revisiRaw !== "") {
+          // Bisa format "Rev.1", "Rev 1", "1", "01"
+          const revMatch = revisiRaw.match(/(\d+)/);
+          revision = revMatch ? parseInt(revMatch[1]) : 0;
+        }
+        // Jika kosong, tetap 0 (revisi pertama)
       }
 
       // ── Tgl Efektif — OPSIONAL ──
@@ -1098,6 +1106,7 @@ export async function getTemplateColumns(docTypeName: string) {
 // Tipe input per dokumen: document_id + daftar penerima dengan qty masing-masing
 export type DistributionRecipientInput = {
   dept_id: string;
+  head_name?: string | null; // ← TAMBAH INI
   qty: number;
 };
 
@@ -1168,6 +1177,7 @@ export async function createDistribution(
           item.recipients.map((r) => ({
             distribution_item_id: distItem.id,
             dept_id: r.dept_id,
+            head_name: r.head_name ?? null, // ← TAMBAH INI
             qty: r.qty,
           }))
         );
@@ -1251,6 +1261,7 @@ export async function updateDistribution(
           item.recipients.map((r) => ({
             distribution_item_id: distItem.id,
             dept_id: r.dept_id,
+            head_name: r.head_name ?? null, // ← TAMBAH INI
             qty: r.qty,
           }))
         );

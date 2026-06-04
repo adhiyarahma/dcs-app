@@ -1,3 +1,4 @@
+// app/dashboard/document-control/distributions/page.tsx
 import { auth } from "@/auth";
 import { redirect } from "next/navigation";
 import {

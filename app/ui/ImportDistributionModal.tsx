@@ -1,27 +1,6 @@
 "use client";
 
-/**
- * ImportDistributionModal
- *
- * Alur:
- * 1. User upload file .xlsx
- * 2. Parse di client pakai SheetJS (xlsx)
- * 3. Validasi & kelompokkan per nomor form → preview tabel
- * 4. Konfirmasi → kirim ke server action createDistribution per form
- *
- * Kolom Excel yang diharapkan (lihat template_distribusi.xlsx):
- *   A  no_form              – string, wajib
- *   B  tanggal_distribusi   – date string YYYY-MM-DD, wajib
- *   C  diserahkan_oleh      – kode dept (DCC), wajib
- *   D  nomor_dokumen        – doc_number, wajib
- *   E  revisi               – angka revisi dokumen, wajib (untuk membedakan dok sama beda revisi)
- *   F  tanggal_dokumen      – date string YYYY-MM-DD, opsional (override per dok)
- *   G  dept_penerima        – kode dept penerima, wajib
- *   H  qty                  – angka ≥ 1, wajib
- *   I  catatan              – string, opsional (dipakai nilai dari baris pertama tiap form)
- */
-
-import { useRef, useState, useCallback } from "react";
+import { useRef, useState, useCallback, useEffect } from "react";
 import * as XLSX from "xlsx";
 import clsx from "clsx";
 import {
@@ -40,7 +19,8 @@ import {
 } from "@/app/lib/actions";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-type Dept = { id: string; code: string; name: string };
+type Head = { name: string; title: string | null };
+type Dept = { id: string; code: string; name: string; heads?: Head[] };
 type DocOption = {
   id: string;
   doc_number: string;
@@ -48,7 +28,6 @@ type DocOption = {
   revision: number;
 };
 
-/** Satu baris mentah dari Excel */
 interface RawRow {
   no_form: string;
   tanggal_distribusi: string;
@@ -59,11 +38,9 @@ interface RawRow {
   dept_penerima: string;
   qty: number;
   catatan: string;
-  /** nomor baris di sheet (untuk pesan error) */
   _row: number;
 }
 
-/** Satu form hasil grouping */
 interface ParsedForm {
   form_number: string;
   distributed_date: string;
@@ -71,9 +48,7 @@ interface ParsedForm {
   handed_by_dept_code: string;
   notes: string;
   items: ParsedItem[];
-  /** error-level (block import) */
   errors: string[];
-  /** warning-level (tidak block, hanya info) */
   warnings: string[];
 }
 
@@ -82,30 +57,26 @@ interface ParsedItem {
   doc_number: string;
   doc_title: string;
   revision: number;
-  distributed_date: string | null; // null = pakai tanggal form
+  distributed_date: string | null;
   recipients: { dept_id: string; dept_code: string; qty: number }[];
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function normalizeDate(raw: unknown): string {
   if (!raw) return "";
-  // SheetJS bisa return Date object atau number (serial) atau string
   if (raw instanceof Date) {
     return raw.toISOString().split("T")[0];
   }
   if (typeof raw === "number") {
-    // Excel date serial
     const d = XLSX.SSF.parse_date_code(raw);
     if (!d) return "";
     const pad = (n: number) => String(n).padStart(2, "0");
     return `${d.y}-${pad(d.m)}-${pad(d.d)}`;
   }
   const s = String(raw).trim();
-  // DD/MM/YYYY → YYYY-MM-DD
   const dmy = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
   if (dmy)
     return `${dmy[3]}-${dmy[2].padStart(2, "0")}-${dmy[1].padStart(2, "0")}`;
-  // already YYYY-MM-DD
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
   return s;
 }
@@ -135,11 +106,38 @@ export default function ImportDistributionModal({
   docOptions: DocOption[];
   currentUserId: string;
 }) {
+  // ── Fetch semua dokumen (termasuk kadaluarsa) saat modal dibuka ─────────────
+  const [allDocOptions, setAllDocOptions] = useState<DocOption[]>([]);
+  const [loadingDocs, setLoadingDocs] = useState(true);
+
+  useEffect(() => {
+    fetch("/api/documents/all")
+      .then((r) => r.json())
+      .then((data: DocOption[]) => {
+        setAllDocOptions(data);
+        setLoadingDocs(false);
+      })
+      .catch(() => {
+        // fallback ke docOptions prop (hanya terbaru) jika fetch gagal
+        setAllDocOptions(docOptions);
+        setLoadingDocs(false);
+      });
+  }, []);
+
+  // Pre-compute data untuk template dropdown
+  const dccHeads: string[] = departments
+    .filter((d) => d.code === "DCC")
+    .flatMap((d) => (d.heads ?? []).map((h) => h.name))
+    .filter(Boolean);
+
+  const deptOptions: string[] = departments.flatMap((dept) => {
+    if (!dept.heads || dept.heads.length === 0) return [dept.code];
+    return dept.heads.map((h) => `${dept.code} - ${h.name}`);
+  });
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const [fileName, setFileName] = useState("");
-
-  // step: "upload" | "preview" | "importing" | "done"
   const [step, setStep] = useState<"upload" | "preview" | "importing" | "done">(
     "upload"
   );
@@ -149,193 +147,85 @@ export default function ImportDistributionModal({
   const [importResults, setImportResults] = useState<
     { form_number: string; success: boolean; error?: string }[]
   >([]);
+  const [downloadingTemplate, setDownloadingTemplate] = useState(false);
 
   // ── Lookup helpers ──────────────────────────────────────────────────────────
-  function findDept(code: string): Dept | undefined {
-    return departments.find(
-      (d) => d.code.toLowerCase() === code.trim().toLowerCase()
-    );
-  }
-  function findDoc(docNumber: string, revision: number): DocOption | undefined {
-    // Cari dokumen yang cocok nomor + revisi; fallback ke nomor saja jika revisi 0/tidak diisi
-    const byBoth = docOptions.find(
-      (d) =>
-        d.doc_number.toLowerCase() === docNumber.trim().toLowerCase() &&
-        d.revision === revision
-    );
-    if (byBoth) return byBoth;
-    // Jika revisi tidak diisi (0), ambil revisi tertinggi dengan nomor yang sama
-    if (!revision) {
-      const candidates = docOptions
-        .filter(
-          (d) => d.doc_number.toLowerCase() === docNumber.trim().toLowerCase()
-        )
-        .sort((a, b) => b.revision - a.revision);
-      return candidates[0];
+  function findDept(raw: string): Dept | undefined {
+    const normalized = raw.trim().toLowerCase();
+
+    const byCode = departments.find((d) => d.code.toLowerCase() === normalized);
+    if (byCode) return byCode;
+
+    const dashIdx = raw.indexOf(" - ");
+    if (dashIdx !== -1) {
+      const code = raw.slice(0, dashIdx).trim().toLowerCase();
+      const headName = raw
+        .slice(dashIdx + 3)
+        .trim()
+        .toLowerCase();
+
+      const dept = departments.find(
+        (d) =>
+          d.code.toLowerCase() === code &&
+          (d.heads ?? []).some((h) => h.name.toLowerCase() === headName)
+      );
+      if (dept) return dept;
+
+      const byCodeOnly = departments.find((d) => d.code.toLowerCase() === code);
+      if (byCodeOnly) return byCodeOnly;
     }
+
+    const byHeadName = departments.find((d) =>
+      (d.heads ?? []).some((h) => h.name.toLowerCase() === normalized)
+    );
+    if (byHeadName) return byHeadName;
+
     return undefined;
   }
 
-  // ── Download template (generate di browser, tanpa file di server) ───────────
-  function downloadTemplate() {
-    const wb = XLSX.utils.book_new();
+  function findDoc(docNumber: string, revision: number): DocOption | undefined {
+    const normalized = docNumber.trim().toLowerCase();
 
-    // ── Sheet 1: Form Distribusi ────────────────────────────────────────────
-    const wsData: (string | number)[][] = [
-      // Baris 1: judul banner
-      ["TEMPLATE IMPORT DISTRIBUSI DOKUMEN", "", "", "", "", "", "", ""],
-      // Baris 2: catatan
-      [
-        "Isi satu baris per DOKUMEN PER PENERIMA. Satu form bisa punya banyak dokumen & penerima.",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-      ],
-      // Baris 3: header kolom
-      [
-        "Nomor Form *",
-        "Tanggal Distribusi *",
-        "Diserahkan Oleh (Kode Dept) *",
-        "Nomor Dokumen *",
-        "Revisi *",
-        "Tanggal Dokumen (opsional)",
-        "Kode Dept Penerima *",
-        "Qty *",
-        "Catatan (opsional)",
-      ],
-      // Baris 4: nama field
-      [
-        "[no_form]",
-        "[tanggal_distribusi]",
-        "[diserahkan_oleh]",
-        "[nomor_dokumen]",
-        "[revisi]",
-        "[tanggal_dokumen]",
-        "[dept_penerima]",
-        "[qty]",
-        "[catatan]",
-      ],
-      // Baris 5-9: contoh data
-      [
-        "001/DCC/06/26",
-        "2026-06-01",
-        "DCC",
-        "DOC-001",
-        1,
-        "",
-        "QC",
-        2,
-        "Distribusi awal",
-      ],
-      ["001/DCC/06/26", "2026-06-01", "DCC", "DOC-001", 1, "", "PROD", 1, ""],
-      [
-        "001/DCC/06/26",
-        "2026-06-01",
-        "DCC",
-        "DOC-001",
-        2,
-        "2026-05-28",
-        "HR",
-        1,
-        "Rev berbeda, tanggal berbeda",
-      ],
-      ["001/DCC/06/26", "2026-06-01", "DCC", "DOC-002", 1, "", "ENG", 1, ""],
-      ["002/DCC/06/26", "2026-06-10", "DCC", "DOC-003", 3, "", "MAINT", 1, ""],
-    ];
+    // 1. Exact match nomor + revisi
+    const byBoth = allDocOptions.find(
+      (d) =>
+        d.doc_number.toLowerCase() === normalized && d.revision === revision
+    );
+    if (byBoth) return byBoth;
 
-    // 20 baris kosong untuk diisi
-    for (let i = 0; i < 20; i++)
-      wsData.push(["", "", "", "", 1, "", "", 1, ""]);
+    // 2. Fallback: revisi tertinggi dengan nomor yang sama
+    const candidates = allDocOptions
+      .filter((d) => d.doc_number.toLowerCase() === normalized)
+      .sort((a, b) => b.revision - a.revision);
 
-    const ws = XLSX.utils.aoa_to_sheet(wsData);
+    return candidates[0];
+  }
 
-    // Lebar kolom
-    ws["!cols"] = [
-      { wch: 20 }, // A no_form
-      { wch: 22 }, // B tanggal_distribusi
-      { wch: 26 }, // C diserahkan_oleh
-      { wch: 22 }, // D nomor_dokumen
-      { wch: 8 }, // E revisi
-      { wch: 26 }, // F tanggal_dokumen
-      { wch: 22 }, // G dept_penerima
-      { wch: 8 }, // H qty
-      { wch: 30 }, // I catatan
-    ];
-
-    // Merge baris 1 & 2
-    ws["!merges"] = [
-      { s: { r: 0, c: 0 }, e: { r: 0, c: 8 } },
-      { s: { r: 1, c: 0 }, e: { r: 1, c: 8 } },
-    ];
-
-    XLSX.utils.book_append_sheet(wb, ws, "Form Distribusi");
-
-    // ── Sheet 2: Petunjuk ───────────────────────────────────────────────────
-    const petunjukData: string[][] = [
-      ["KOLOM", "KETERANGAN"],
-      [
-        "Nomor Form *",
-        "Nomor form distribusi. Baris dengan nomor form yang sama akan digabung menjadi SATU form. Contoh: 001/DCC/06/26",
-      ],
-      [
-        "Tanggal Distribusi *",
-        "Tanggal distribusi utama form. Format: YYYY-MM-DD (contoh: 2026-06-01) atau DD/MM/YYYY.",
-      ],
-      [
-        "Diserahkan Oleh *",
-        "Kode departemen pengirim, harus DCC. Contoh: DCC.",
-      ],
-      [
-        "Nomor Dokumen *",
-        "Nomor dokumen yang didistribusikan. Harus ada di database. Contoh: DOC-001.",
-      ],
-      [
-        "Revisi *",
-        "Nomor revisi dokumen (angka). Penting jika ada dokumen dengan nomor sama tapi beda revisi. Jika kosong/0, sistem mengambil revisi tertinggi yang tersedia.",
-      ],
-      [
-        "Tanggal Dokumen",
-        "OPSIONAL. Isi jika tanggal distribusi dokumen ini berbeda dari tanggal form. Kosongkan jika sama.",
-      ],
-      [
-        "Kode Dept Penerima *",
-        "Kode departemen penerima. Harus ada di database. Contoh: QC, PROD, HR, ENG.",
-      ],
-      ["Qty *", "Jumlah dokumen yang diterima. Minimal 1."],
-      [
-        "Catatan",
-        "OPSIONAL. Catatan tambahan untuk form (diambil dari baris pertama tiap nomor form).",
-      ],
-      ["", ""],
-      ["— ATURAN PENTING —", ""],
-      [
-        "Satu baris = satu penerima",
-        "Jika DOC-001 diterima QC dan PROD → buat 2 baris dengan nomor form yang sama.",
-      ],
-      [
-        "Satu form bisa banyak dokumen",
-        "Baris dengan nomor form yang sama dikelompokkan jadi satu form distribusi.",
-      ],
-      [
-        "Kolom * wajib diisi",
-        "Baris yang tidak lengkap akan ditolak saat preview import.",
-      ],
-      [
-        "Format tanggal",
-        "Gunakan YYYY-MM-DD untuk menghindari ambiguitas. Contoh: 2026-06-01.",
-      ],
-    ];
-
-    const wsPetunjuk = XLSX.utils.aoa_to_sheet(petunjukData);
-    wsPetunjuk["!cols"] = [{ wch: 28 }, { wch: 70 }];
-    XLSX.utils.book_append_sheet(wb, wsPetunjuk, "Petunjuk");
-
-    // Trigger download
-    XLSX.writeFile(wb, "template_distribusi.xlsx");
+  // ── Download template ───────────────────────────────────────────────────────
+  async function downloadTemplate() {
+    setDownloadingTemplate(true);
+    try {
+      const res = await fetch("/api/distributions/template", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          dcc_heads: dccHeads,
+          dept_options: deptOptions,
+        }),
+      });
+      if (!res.ok) throw new Error("Gagal generate template");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "template_distribusi.xlsx";
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      alert("Gagal download template. Coba lagi.");
+    } finally {
+      setDownloadingTemplate(false);
+    }
   }
 
   // ── Parse Excel ─────────────────────────────────────────────────────────────
@@ -347,13 +237,11 @@ export default function ImportDistributionModal({
         const data = new Uint8Array(e.target!.result as ArrayBuffer);
         const wb = XLSX.read(data, { type: "array", cellDates: true });
 
-        // Cari sheet pertama yang bukan "Petunjuk"
         const sheetName =
           wb.SheetNames.find((n) => !n.toLowerCase().includes("petunjuk")) ??
           wb.SheetNames[0];
         const ws = wb.Sheets[sheetName];
 
-        // Baca dari baris ke-5 (index 4) — baris 1-4 adalah header
         const raw: Record<string, unknown>[] = XLSX.utils.sheet_to_json(ws, {
           header: [
             "no_form",
@@ -366,11 +254,10 @@ export default function ImportDistributionModal({
             "qty",
             "catatan",
           ],
-          range: 4, // skip 4 baris pertama (0-indexed)
+          range: 4,
           defval: "",
         });
 
-        // Filter baris kosong
         const rows: RawRow[] = raw
           .map((r, i) => ({
             no_form: String(r.no_form ?? "").trim(),
@@ -382,7 +269,7 @@ export default function ImportDistributionModal({
             dept_penerima: String(r.dept_penerima ?? "").trim(),
             qty: Math.max(1, parseInt(String(r.qty ?? "1")) || 1),
             catatan: String(r.catatan ?? "").trim(),
-            _row: i + 5, // nomor baris Excel (1-based, header di 3-4)
+            _row: i + 5,
           }))
           .filter((r) => r.no_form || r.nomor_dokumen || r.dept_penerima);
 
@@ -393,7 +280,6 @@ export default function ImportDistributionModal({
           return;
         }
 
-        // ── Group by no_form ──────────────────────────────────────────────────
         const formMap = new Map<string, RawRow[]>();
         rows.forEach((r) => {
           if (!formMap.has(r.no_form)) formMap.set(r.no_form, []);
@@ -407,7 +293,6 @@ export default function ImportDistributionModal({
           const warnings: string[] = [];
           const firstRow = formRows[0];
 
-          // Validasi form-level
           if (!formNumber) errors.push("Nomor form kosong.");
           if (!firstRow.tanggal_distribusi)
             errors.push("Tanggal distribusi tidak valid atau kosong.");
@@ -420,7 +305,6 @@ export default function ImportDistributionModal({
               `Departemen pengirim "${firstRow.diserahkan_oleh}" tidak ditemukan di database.`
             );
 
-          // Group rows by nomor_dokumen + revisi (composite key)
           const docMap = new Map<string, RawRow[]>();
           formRows.forEach((r) => {
             if (!r.nomor_dokumen) {
@@ -434,7 +318,7 @@ export default function ImportDistributionModal({
 
           const items: ParsedItem[] = [];
 
-          docMap.forEach((docRows, _key) => {
+          docMap.forEach((docRows) => {
             const firstDocRow = docRows[0];
             const docNumber = firstDocRow.nomor_dokumen;
             const revisi = firstDocRow.revisi;
@@ -449,7 +333,6 @@ export default function ImportDistributionModal({
               return;
             }
 
-            // tanggal override — ambil dari baris pertama doc ini
             const overrideDateRaw = docRows[0].tanggal_dokumen;
             const overrideDate =
               overrideDateRaw && overrideDateRaw !== firstRow.tanggal_distribusi
@@ -461,7 +344,7 @@ export default function ImportDistributionModal({
               docRows.some((r) => r.tanggal_dokumen !== overrideDateRaw)
             )
               warnings.push(
-                `Dokumen "${docNumber}" Rev.${revisi} memiliki tanggal override tidak konsisten antar baris; digunakan nilai baris pertama.`
+                `Dokumen "${docNumber}" Rev.${revisi} memiliki tanggal override tidak konsisten; digunakan nilai baris pertama.`
               );
 
             const recipients: ParsedItem["recipients"] = [];
@@ -530,7 +413,6 @@ export default function ImportDistributionModal({
         });
 
         setForms(parsedForms);
-        // Auto-expand forms yang punya error
         setExpandedForms(
           new Set(
             parsedForms
@@ -571,39 +453,49 @@ export default function ImportDistributionModal({
   async function handleImport() {
     const validForms = forms.filter((f) => f.errors.length === 0);
     setStep("importing");
-    const results: typeof importResults = [];
+    const results: { form_number: string; success: boolean; error?: string }[] =
+      [];
 
-    for (const form of validForms) {
-      const items: DistributionItemInput[] = form.items.map((item) => ({
-        document_id: item.document_id,
-        distributed_date: item.distributed_date,
-        recipients: item.recipients.map((r) => ({
-          dept_id: r.dept_id,
-          qty: r.qty,
-        })),
-      }));
+    // Proses dalam batch 10 form sekaligus
+    const BATCH_SIZE = 10;
+    for (let i = 0; i < validForms.length; i += BATCH_SIZE) {
+      const batch = validForms.slice(i, i + BATCH_SIZE);
 
-      const result = await createDistribution(
-        form.form_number,
-        form.distributed_date,
-        form.handed_by_dept_id,
-        items,
-        currentUserId,
-        form.notes
+      const batchResults = await Promise.all(
+        batch.map(async (form) => {
+          const items: DistributionItemInput[] = form.items.map((item) => ({
+            document_id: item.document_id,
+            distributed_date: item.distributed_date,
+            recipients: item.recipients.map((r) => ({
+              dept_id: r.dept_id,
+              qty: r.qty,
+            })),
+          }));
+
+          const result = await createDistribution(
+            form.form_number,
+            form.distributed_date,
+            form.handed_by_dept_id,
+            items,
+            currentUserId,
+            form.notes
+          );
+
+          return {
+            form_number: form.form_number,
+            success: !result?.error,
+            error: result?.error,
+          };
+        })
       );
 
-      results.push({
-        form_number: form.form_number,
-        success: !result?.error,
-        error: result?.error,
-      });
+      results.push(...batchResults);
     }
 
     setImportResults(results);
     setStep("done");
   }
 
-  // ── Toggle expand ───────────────────────────────────────────────────────────
   function toggleExpand(key: string) {
     setExpandedForms((prev) => {
       const next = new Set(prev);
@@ -657,68 +549,86 @@ export default function ImportDistributionModal({
               <button
                 type="button"
                 onClick={downloadTemplate}
-                className="flex items-center gap-3 p-4 border border-dashed border-blue-300 rounded-xl bg-blue-50 hover:bg-blue-100 transition-colors group w-full text-left"
+                disabled={downloadingTemplate}
+                className="flex items-center gap-3 p-4 border border-dashed border-blue-300 rounded-xl bg-blue-50 hover:bg-blue-100 transition-colors group w-full text-left disabled:opacity-60"
               >
                 <div className="p-2 bg-blue-100 rounded-lg group-hover:bg-blue-200 transition-colors shrink-0">
-                  <DocumentArrowDownIcon className="w-5 h-5 text-blue-600" />
+                  <DocumentArrowDownIcon
+                    className={clsx(
+                      "w-5 h-5 text-blue-600",
+                      downloadingTemplate && "animate-pulse"
+                    )}
+                  />
                 </div>
                 <div>
                   <p className="text-sm font-semibold text-blue-700">
-                    Download Template Excel
+                    {downloadingTemplate
+                      ? "Menyiapkan template..."
+                      : "Download Template Excel"}
                   </p>
                   <p className="text-xs text-blue-500">
-                    template_distribusi.xlsx · berisi contoh data & petunjuk
+                    template_distribusi.xlsx · dengan dropdown departemen &
+                    revisi
                   </p>
                 </div>
               </button>
 
               {/* Drop zone */}
-              <div
-                onDragOver={(e) => {
-                  e.preventDefault();
-                  setDragging(true);
-                }}
-                onDragLeave={() => setDragging(false)}
-                onDrop={handleDrop}
-                onClick={() => fileInputRef.current?.click()}
-                className={clsx(
-                  "relative flex flex-col items-center justify-center gap-3 h-48 rounded-xl border-2 border-dashed cursor-pointer transition-all",
-                  dragging
-                    ? "border-blue-400 bg-blue-50"
-                    : "border-slate-200 hover:border-blue-300 hover:bg-slate-50"
-                )}
-              >
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".xlsx,.xls"
-                  className="hidden"
-                  onChange={(e) => handleFile(e.target.files?.[0])}
-                />
+              {loadingDocs ? (
+                <div className="flex flex-col items-center justify-center gap-3 h-48 rounded-xl border-2 border-dashed border-slate-200 bg-slate-50">
+                  <div className="w-8 h-8 rounded-full border-4 border-blue-200 border-t-blue-600 animate-spin" />
+                  <p className="text-xs text-slate-400">
+                    Memuat daftar dokumen...
+                  </p>
+                </div>
+              ) : (
                 <div
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setDragging(true);
+                  }}
+                  onDragLeave={() => setDragging(false)}
+                  onDrop={handleDrop}
+                  onClick={() => fileInputRef.current?.click()}
                   className={clsx(
-                    "p-4 rounded-full transition-colors",
-                    dragging ? "bg-blue-100" : "bg-slate-100"
+                    "relative flex flex-col items-center justify-center gap-3 h-48 rounded-xl border-2 border-dashed cursor-pointer transition-all",
+                    dragging
+                      ? "border-blue-400 bg-blue-50"
+                      : "border-slate-200 hover:border-blue-300 hover:bg-slate-50"
                   )}
                 >
-                  <ArrowUpTrayIcon
-                    className={clsx(
-                      "w-7 h-7",
-                      dragging ? "text-blue-500" : "text-slate-400"
-                    )}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".xlsx,.xls"
+                    className="hidden"
+                    onChange={(e) => handleFile(e.target.files?.[0])}
                   />
+                  <div
+                    className={clsx(
+                      "p-4 rounded-full transition-colors",
+                      dragging ? "bg-blue-100" : "bg-slate-100"
+                    )}
+                  >
+                    <ArrowUpTrayIcon
+                      className={clsx(
+                        "w-7 h-7",
+                        dragging ? "text-blue-500" : "text-slate-400"
+                      )}
+                    />
+                  </div>
+                  <div className="text-center">
+                    <p className="text-sm font-medium text-slate-700">
+                      {dragging
+                        ? "Lepaskan file di sini"
+                        : "Drag & drop file Excel"}
+                    </p>
+                    <p className="text-xs text-slate-400 mt-1">
+                      atau klik untuk pilih file · .xlsx / .xls
+                    </p>
+                  </div>
                 </div>
-                <div className="text-center">
-                  <p className="text-sm font-medium text-slate-700">
-                    {dragging
-                      ? "Lepaskan file di sini"
-                      : "Drag & drop file Excel"}
-                  </p>
-                  <p className="text-xs text-slate-400 mt-1">
-                    atau klik untuk pilih file · .xlsx / .xls
-                  </p>
-                </div>
-              </div>
+              )}
 
               {parseError && (
                 <div className="flex items-start gap-2 bg-red-50 border border-red-200 text-red-600 text-sm rounded-xl px-4 py-3">
@@ -759,7 +669,6 @@ export default function ImportDistributionModal({
           {/* ── STEP: PREVIEW ── */}
           {step === "preview" && (
             <div className="space-y-4">
-              {/* Summary bar */}
               <div className="grid grid-cols-3 gap-3">
                 <div className="bg-slate-50 rounded-xl p-3 text-center">
                   <p className="text-2xl font-bold text-slate-800">
@@ -808,7 +717,6 @@ export default function ImportDistributionModal({
                 </div>
               )}
 
-              {/* Form cards */}
               <div className="space-y-2">
                 {forms.map((form) => {
                   const hasError = form.errors.length > 0;
@@ -827,7 +735,6 @@ export default function ImportDistributionModal({
                           : "border-slate-200"
                       )}
                     >
-                      {/* Card header */}
                       <button
                         type="button"
                         onClick={() => toggleExpand(form.form_number)}
@@ -840,7 +747,6 @@ export default function ImportDistributionModal({
                             : "bg-slate-50 hover:bg-slate-100"
                         )}
                       >
-                        {/* status icon */}
                         {hasError ? (
                           <ExclamationCircleIcon className="w-4 h-4 text-red-500 shrink-0" />
                         ) : hasWarning ? (
@@ -899,10 +805,8 @@ export default function ImportDistributionModal({
                         )}
                       </button>
 
-                      {/* Expanded detail */}
                       {expanded && (
                         <div className="px-4 py-3 space-y-3 bg-white border-t border-slate-100">
-                          {/* Errors */}
                           {form.errors.length > 0 && (
                             <div className="space-y-1">
                               {form.errors.map((e, i) => (
@@ -917,7 +821,6 @@ export default function ImportDistributionModal({
                             </div>
                           )}
 
-                          {/* Warnings */}
                           {form.warnings.length > 0 && (
                             <div className="space-y-1">
                               {form.warnings.map((w, i) => (
@@ -932,7 +835,6 @@ export default function ImportDistributionModal({
                             </div>
                           )}
 
-                          {/* Items preview */}
                           {form.items.length > 0 && (
                             <div className="space-y-2">
                               {form.items.map((item) => (
@@ -1085,7 +987,7 @@ export default function ImportDistributionModal({
             </button>
           )}
           {step === "done" && <div />}
-          {(step === "upload" || step === "preview") && step !== "preview" && (
+          {step === "upload" && (
             <button
               type="button"
               onClick={onClose}

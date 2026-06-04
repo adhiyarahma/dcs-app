@@ -53,6 +53,7 @@ type DistRecipient = {
   id: string;
   qty: number;
   dept_id?: string;
+  head_name?: string | null;
   dept: Dept | null;
 };
 
@@ -339,6 +340,10 @@ function DocDropdown({
 }
 
 // ─── Recipients Input (per item) ──────────────────────────────────────────────
+// Setiap entri penerima = { dept_id, head_name, qty }
+// Satu dept bisa muncul beberapa kali jika punya banyak heads
+// Key unik: dept_id + head_name (atau "" jika tanpa head)
+
 function RecipientsInput({
   departments,
   recipients,
@@ -351,28 +356,73 @@ function RecipientsInput({
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
 
-  const selectedIds = recipients.map((r) => r.dept_id);
-  const available = departments.filter((d) => !selectedIds.includes(d.id));
-  const filtered = available.filter(
-    (d) =>
-      d.code.toLowerCase().includes(search.toLowerCase()) ||
-      d.name.toLowerCase().includes(search.toLowerCase())
-  );
+  // Buat daftar semua opsi: dept × head (flatten)
+  type RecipOption = {
+    dept_id: string;
+    dept_code: string;
+    dept_name: string;
+    head_name: string; // "" jika tidak ada head
+  };
 
-  function add(deptId: string) {
-    onChange([...recipients, { dept_id: deptId, qty: 1 }]);
+  const allOptions: RecipOption[] = departments.flatMap((dept) => {
+    if (!dept.heads || dept.heads.length === 0) {
+      return [
+        {
+          dept_id: dept.id,
+          dept_code: dept.code,
+          dept_name: dept.name,
+          head_name: "",
+        },
+      ];
+    }
+    return dept.heads.map((h) => ({
+      dept_id: dept.id,
+      dept_code: dept.code,
+      dept_name: dept.name,
+      head_name: h.name,
+    }));
+  });
+
+  // Key unik per opsi
+  const optKey = (o: { dept_id: string; head_name: string }) =>
+    `${o.dept_id}__${o.head_name}`;
+
+  // Opsi yang belum dipilih
+  const selectedKeys = new Set(
+    recipients.map((r) => `${r.dept_id}__${r.head_name ?? ""}`)
+  );
+  const available = allOptions.filter((o) => !selectedKeys.has(optKey(o)));
+
+  const filtered = available.filter((o) => {
+    const q = search.toLowerCase();
+    return (
+      o.dept_code.toLowerCase().includes(q) ||
+      o.dept_name.toLowerCase().includes(q) ||
+      o.head_name.toLowerCase().includes(q)
+    );
+  });
+
+  function add(opt: RecipOption) {
+    onChange([
+      ...recipients,
+      { dept_id: opt.dept_id, head_name: opt.head_name || null, qty: 1 },
+    ]);
     setOpen(false);
     setSearch("");
   }
 
-  function remove(deptId: string) {
-    onChange(recipients.filter((r) => r.dept_id !== deptId));
+  function remove(key: string) {
+    onChange(
+      recipients.filter((r) => `${r.dept_id}__${r.head_name ?? ""}` !== key)
+    );
   }
 
-  function updateQty(deptId: string, qty: number) {
+  function updateQty(key: string, qty: number) {
     onChange(
       recipients.map((r) =>
-        r.dept_id === deptId ? { ...r, qty: Math.max(1, qty) } : r
+        `${r.dept_id}__${r.head_name ?? ""}` === key
+          ? { ...r, qty: Math.max(1, qty) }
+          : r
       )
     );
   }
@@ -388,10 +438,10 @@ function RecipientsInput({
           {recipients.map((entry) => {
             const dept = departments.find((d) => d.id === entry.dept_id);
             if (!dept) return null;
-            const head = getDeptHead(dept);
+            const key = `${entry.dept_id}__${entry.head_name ?? ""}`;
             return (
               <div
-                key={entry.dept_id}
+                key={key}
                 className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-2.5 py-1.5"
               >
                 <div className="flex-1 min-w-0">
@@ -399,13 +449,15 @@ function RecipientsInput({
                     <span className="font-mono text-[11px] font-bold text-blue-700">
                       {dept.code}
                     </span>
-                    <span className="text-[11px] text-slate-600 truncate">
-                      {dept.name}
-                    </span>
+                    {entry.head_name && (
+                      <span className="text-[11px] text-slate-600 truncate">
+                        — {entry.head_name}
+                      </span>
+                    )}
                   </div>
-                  {head?.name && (
-                    <p className="text-[10px] text-slate-400">{head.name}</p>
-                  )}
+                  <p className="text-[10px] text-slate-400 truncate">
+                    {dept.name}
+                  </p>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
                   <span className="text-[10px] text-slate-400">Qty</span>
@@ -414,14 +466,14 @@ function RecipientsInput({
                     min={1}
                     value={entry.qty}
                     onChange={(e) =>
-                      updateQty(entry.dept_id, parseInt(e.target.value) || 1)
+                      updateQty(key, parseInt(e.target.value) || 1)
                     }
                     className="w-14 border border-slate-200 rounded-lg px-1.5 py-1 text-xs text-center outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/10 transition-all bg-white"
                   />
                 </div>
                 <button
                   type="button"
-                  onClick={() => remove(entry.dept_id)}
+                  onClick={() => remove(key)}
                   className="p-0.5 text-slate-300 hover:text-red-500 transition-colors shrink-0"
                 >
                   <XMarkIcon className="w-3.5 h-3.5" />
@@ -443,7 +495,7 @@ function RecipientsInput({
             Tambah penerima
           </button>
           {open && (
-            <div className="absolute z-30 mt-1 w-64 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden">
+            <div className="absolute z-30 mt-1 w-72 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden">
               <div className="p-2 border-b border-slate-100">
                 <div className="relative">
                   <MagnifyingGlassIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
@@ -451,43 +503,42 @@ function RecipientsInput({
                     autoFocus
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
-                    placeholder="Cari departemen..."
+                    placeholder="Cari departemen atau nama..."
                     className="w-full pl-8 pr-3 py-1.5 text-xs border border-slate-200 rounded-lg outline-none focus:border-blue-400"
                   />
                 </div>
               </div>
-              <div className="max-h-44 overflow-y-auto divide-y divide-slate-50">
+              <div className="max-h-52 overflow-y-auto divide-y divide-slate-50">
                 {filtered.length === 0 ? (
                   <p className="px-4 py-3 text-xs text-slate-400 text-center">
                     Tidak ditemukan
                   </p>
                 ) : (
-                  filtered.map((dept) => {
-                    const head = getDeptHead(dept);
-                    return (
-                      <button
-                        key={dept.id}
-                        type="button"
-                        onClick={() => add(dept.id)}
-                        className="w-full flex items-center justify-between px-3 py-2 text-sm hover:bg-slate-50 transition-colors text-left"
-                      >
-                        <div>
-                          <span className="font-mono text-xs font-bold text-blue-700 mr-1.5">
-                            {dept.code}
+                  filtered.map((opt) => (
+                    <button
+                      key={optKey(opt)}
+                      type="button"
+                      onClick={() => add(opt)}
+                      className="w-full flex items-center justify-between px-3 py-2.5 text-sm hover:bg-slate-50 transition-colors text-left"
+                    >
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-mono text-xs font-bold text-blue-700 shrink-0">
+                            {opt.dept_code}
                           </span>
-                          <span className="text-slate-700 text-xs">
-                            {dept.name}
-                          </span>
-                          {head?.name && (
-                            <p className="text-[10px] text-slate-400 mt-0.5">
-                              {head.name}
-                            </p>
+                          {opt.head_name && (
+                            <span className="text-xs text-slate-700 truncate">
+                              — {opt.head_name}
+                            </span>
                           )}
                         </div>
-                        <PlusIcon className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                      </button>
-                    );
-                  })
+                        <p className="text-[10px] text-slate-400 truncate mt-0.5">
+                          {opt.dept_name}
+                        </p>
+                      </div>
+                      <PlusIcon className="w-3.5 h-3.5 text-slate-400 shrink-0 ml-2" />
+                    </button>
+                  ))
                 )}
               </div>
             </div>
@@ -612,6 +663,7 @@ function ItemRow({
 function FormModal({
   title,
   onClose,
+  onImport,
   departments,
   docOptions,
   defaultValues,
@@ -620,6 +672,7 @@ function FormModal({
 }: {
   title: string;
   onClose: () => void;
+  onImport?: () => void;
   departments: Dept[];
   docOptions: DocOption[];
   defaultValues?: Distribution;
@@ -646,6 +699,7 @@ function FormModal({
           recipients: item.recipients
             .map((r) => ({
               dept_id: r.dept?.id ?? r.dept_id ?? "",
+              head_name: r.head_name ?? null,
               qty: r.qty,
             }))
             .filter((r) => r.dept_id),
@@ -762,12 +816,24 @@ function FormModal({
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 shrink-0">
           <h2 className="text-sm font-bold text-slate-800">{title}</h2>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all"
-          >
-            <XMarkIcon className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            {!isEdit && onImport && (
+              <button
+                type="button"
+                onClick={onImport}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 transition-all"
+              >
+                <ArrowUpTrayIcon className="w-3.5 h-3.5" />
+                Import Excel
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all"
+            >
+              <XMarkIcon className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         <form
@@ -1163,13 +1229,6 @@ export default function DistributionsTable({
           Lihat Form
         </button>
         <button
-          onClick={() => setShowImport(true)}
-          className="flex items-center justify-center gap-2 bg-white border border-slate-200 text-slate-700 px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-slate-50 transition-all shrink-0"
-        >
-          <ArrowUpTrayIcon className="w-4 h-4" />
-          Import Excel
-        </button>
-        <button
           onClick={() => {
             setShowCreate(true);
             setEditItem(null);
@@ -1488,6 +1547,10 @@ export default function DistributionsTable({
         <FormModal
           title="Tambah Form Distribusi"
           onClose={() => setShowCreate(false)}
+          onImport={() => {
+            setShowCreate(false);
+            setShowImport(true);
+          }}
           departments={departments}
           docOptions={docOptions}
           createdBy={currentUserId}

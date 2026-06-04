@@ -129,8 +129,13 @@ function Modal({
         className="absolute inset-0 bg-black/50 backdrop-blur-sm"
         onClick={onClose}
       />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+      {/* Perbaikan di bawah: 
+        1. Menambahkan `max-h-[calc(100vh-2rem)]` agar modal tidak melebihi tinggi layar.
+        2. Menambahkan `flex flex-col` untuk memisahkan header dan konten.
+      */}
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[calc(100vh-2rem)] flex flex-col overflow-hidden">
+        {/* Header Tetap di Atas (Sticky) */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 shrink-0">
           <h2 className="text-sm font-bold text-slate-800">{title}</h2>
           <button
             onClick={onClose}
@@ -139,7 +144,14 @@ function Modal({
             <XMarkIcon className="w-5 h-5" />
           </button>
         </div>
-        <div className="px-5 py-4">{children}</div>
+
+        {/* Area Konten yang Bisa Di-scroll:
+          Menambahkan `overflow-y-auto` agar jika FormFields memanjang, 
+          hanya area ini yang nge-scroll, tombol "Simpan/Batal" tetap terlihat di bawah jika ikut dimasukkan.
+        */}
+        <div className="px-5 py-4 overflow-y-auto flex-1 custom-scrollbar">
+          {children}
+        </div>
       </div>
     </div>
   );

@@ -50,14 +50,13 @@ export async function getDepartments() {
       id, 
       code, 
       name,
-      department_heads(name, title) // Pastikan nama kolomnya benar: 'name' dan 'title'
+      department_heads(name, title)
     `
     )
     .order("code");
 
   return (data ?? []).map((d: any) => ({
     ...d,
-    // Kita simpan hasil join sebagai array 'heads'
     heads: d.department_heads ?? [],
   }));
 }
@@ -72,7 +71,7 @@ async function attachFiles(documents: any[]) {
   const { data: files } = await supabaseAdmin
     .from("document_files")
     .select("id, file_label, file_url, file_name, file_type, document_id")
-    .in("document_id", ids); // ← satu query untuk semua
+    .in("document_id", ids);
 
   const fileMap = new Map<string, any[]>();
   (files ?? []).forEach((f) => {
@@ -209,7 +208,6 @@ export async function getDocumentById(id: string) {
   };
 }
 
-// Ganti fungsi fetchDeletedDocuments di data.ts
 export async function fetchDeletedDocuments() {
   const PAGE = 1000;
   let allData: any[] = [];
@@ -271,7 +269,7 @@ export async function getDistributions() {
         id, distributed_date,
         documents(id, doc_number, title, revision, document_types(name)),
         distribution_recipients(
-          id, qty,
+          id, qty, head_name,
           departments(id, code, name, department_heads(name, title))
         )
       )
@@ -301,6 +299,7 @@ export async function getDistributions() {
       recipients: (item.distribution_recipients ?? []).map((r: any) => ({
         id: r.id,
         qty: r.qty,
+        head_name: r.head_name ?? null, // ← TAMBAHAN
         dept: r.departments
           ? { ...r.departments, heads: r.departments.department_heads }
           : null,
@@ -323,7 +322,7 @@ export async function getDistributionById(id: string) {
         id, distributed_date,
         documents(id, doc_number, title, revision, document_types(name)),
         distribution_recipients(
-          id, qty, dept_id,
+          id, qty, dept_id, head_name,
           departments(id, code, name, department_heads(name, title))
         )
       )
@@ -356,6 +355,7 @@ export async function getDistributionById(id: string) {
         id: r.id,
         qty: r.qty,
         dept_id: r.dept_id,
+        head_name: r.head_name ?? null, // ← TAMBAHAN
         dept: r.departments ?? null,
       })),
     })),
@@ -386,25 +386,35 @@ export async function getActiveDocuments() {
   }));
 }
 
-export async function getNextFormNumber(): Promise<string> {
-  const now = new Date();
-  const mm = String(now.getMonth() + 1).padStart(2, "0");
-  const yy = String(now.getFullYear()).slice(-2);
-  const startOfMonth = `${now.getFullYear()}-${mm}-01`;
-  const startOfNext =
-    now.getMonth() === 11
-      ? `${now.getFullYear() + 1}-01-01`
-      : `${now.getFullYear()}-${String(now.getMonth() + 2).padStart(
-          2,
-          "0"
-        )}-01`;
+export async function getAllDocumentsForImport() {
+  const PAGE = 1000;
+  let allData: any[] = [];
+  let from = 0;
 
-  const { count } = await supabaseAdmin
-    .from("distributions")
-    .select("*", { count: "exact", head: true })
-    .gte("created_at", startOfMonth)
-    .lt("created_at", startOfNext);
+  while (true) {
+    const { data, error } = await supabaseAdmin
+      .from("documents")
+      .select(
+        `id, doc_number, title, revision,
+         document_types(name),
+         departments(code)`
+      )
+      .in("status", ["terbaru", "kadaluarsa"])
+      .order("doc_number")
+      .range(from, from + PAGE - 1);
 
-  const nextNum = String((count ?? 0) + 1).padStart(3, "0");
-  return `${nextNum}/MRP/${mm}/${yy}`;
+    if (error || !data || data.length === 0) break;
+    allData = [...allData, ...data];
+    if (data.length < PAGE) break;
+    from += PAGE;
+  }
+
+  return allData.map((d: any) => ({
+    id: d.id,
+    doc_number: d.doc_number,
+    title: d.title,
+    revision: d.revision,
+    type_name: d.document_types?.name ?? "",
+    dept_code: d.departments?.code ?? "",
+  }));
 }
