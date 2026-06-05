@@ -212,7 +212,10 @@ export default function DocumentTypesTable({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // ── Baca query param ?category=<id> dari URL saat pertama load ──
+  // State untuk multi nama
+  const [nameList, setNameList] = useState<string[]>([""]);
+
+  // Baca query param ?category=<id> dari URL saat pertama load
   useEffect(() => {
     const cat = searchParams.get("category");
     if (cat) {
@@ -230,7 +233,7 @@ export default function DocumentTypesTable({
     return matchSearch && matchCat;
   });
 
-  // ─── PAGINATION LOGIC ────────────────────────────────────────────────────
+  // ─── PAGINATION ───────────────────────────────────────────────
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
   const paginatedTypes = filtered.slice(
     (currentPage - 1) * PAGE_SIZE,
@@ -240,22 +243,80 @@ export default function DocumentTypesTable({
   const activeCategoryName =
     categories.find((c) => c.id === filterCategory)?.name ?? "";
 
+  // ─── MODAL HELPERS ────────────────────────────────────────────
+  function openCreateModal() {
+    setNameList([""]);
+    setEditItem(null);
+    setError("");
+    setShowModal(true);
+  }
+
+  function openEditModal(type: DocType) {
+    setEditItem(type);
+    setNameList([type.name]);
+    setError("");
+    setShowModal(true);
+  }
+
+  function closeModal() {
+    setShowModal(false);
+    setEditItem(null);
+    setNameList([""]);
+    setError("");
+  }
+
+  function addName() {
+    setNameList((prev) => [...prev, ""]);
+  }
+
+  function removeName(i: number) {
+    setNameList((prev) => prev.filter((_, idx) => idx !== i));
+  }
+
+  function updateName(i: number, val: string) {
+    setNameList((prev) => prev.map((n, idx) => (idx === i ? val : n)));
+  }
+
+  // ─── SUBMIT ───────────────────────────────────────────────────
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setLoading(true);
     setError("");
     const fd = new FormData(e.currentTarget);
-    const res = editItem
-      ? await updateDocumentType(editItem.id, fd)
-      : await createDocumentType(fd);
-    setLoading(false);
-    if (res?.error) setError(res.error);
-    else {
-      setShowModal(false);
-      setEditItem(null);
+    const category_id = fd.get("category_id") as string;
+
+    if (editItem) {
+      // Edit: update satu item
+      const newFd = new FormData();
+      newFd.append("name", nameList[0].trim());
+      newFd.append("category_id", category_id);
+      const res = await updateDocumentType(editItem.id, newFd);
+      setLoading(false);
+      if (res?.error) setError(res.error);
+      else closeModal();
+    } else {
+      // Tambah: insert semua nama sekaligus
+      const validNames = nameList.filter((n) => n.trim());
+      if (validNames.length === 0) {
+        setError("Minimal satu nama jenis dokumen harus diisi.");
+        setLoading(false);
+        return;
+      }
+      const errors: string[] = [];
+      for (const name of validNames) {
+        const newFd = new FormData();
+        newFd.append("name", name.trim());
+        newFd.append("category_id", category_id);
+        const res = await createDocumentType(newFd);
+        if (res?.error) errors.push(`"${name}": ${res.error}`);
+      }
+      setLoading(false);
+      if (errors.length > 0) setError(errors.join("\n"));
+      else closeModal();
     }
   }
 
+  // ─── DELETE ───────────────────────────────────────────────────
   async function handleDelete() {
     if (!deleteItem) return;
     setLoading(true);
@@ -311,11 +372,7 @@ export default function DocumentTypesTable({
             />
           </div>
           <button
-            onClick={() => {
-              setShowModal(true);
-              setEditItem(null);
-              setError("");
-            }}
+            onClick={openCreateModal}
             className="flex items-center justify-center gap-2 bg-slate-900 text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:bg-slate-800 transition-all active:scale-95 shrink-0"
           >
             <PlusIcon className="w-4 h-4" />
@@ -423,11 +480,7 @@ export default function DocumentTypesTable({
                   <td className="px-6 py-4">
                     <div className="flex justify-end gap-1.5">
                       <button
-                        onClick={() => {
-                          setEditItem(type);
-                          setShowModal(true);
-                          setError("");
-                        }}
+                        onClick={() => openEditModal(type)}
                         className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                       >
                         <PencilIcon className="w-4 h-4" />
@@ -477,11 +530,7 @@ export default function DocumentTypesTable({
             </div>
             <div className="flex gap-1 shrink-0">
               <button
-                onClick={() => {
-                  setEditItem(type);
-                  setShowModal(true);
-                  setError("");
-                }}
+                onClick={() => openEditModal(type)}
                 className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
               >
                 <PencilIcon className="w-4 h-4" />
@@ -511,24 +560,10 @@ export default function DocumentTypesTable({
       {showModal && (
         <Modal
           title={editItem ? "Edit Jenis Dokumen" : "Tambah Jenis Dokumen"}
-          onClose={() => {
-            setShowModal(false);
-            setEditItem(null);
-          }}
+          onClose={closeModal}
         >
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
-                Nama Jenis
-              </label>
-              <input
-                name="name"
-                defaultValue={editItem?.name}
-                required
-                placeholder="contoh: Invoice, Surat Jalan..."
-                className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 transition-all"
-              />
-            </div>
+            {/* Kategori */}
             <div>
               <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
                 Kategori
@@ -547,18 +582,57 @@ export default function DocumentTypesTable({
                 ))}
               </select>
             </div>
+
+            {/* Nama Jenis — multi input saat tambah, single saat edit */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
+                Nama Jenis
+              </label>
+              <div className="space-y-2">
+                {nameList.map((name, i) => (
+                  <div key={i} className="flex gap-2">
+                    <input
+                      value={name}
+                      onChange={(e) => updateName(i, e.target.value)}
+                      required
+                      placeholder="contoh: Prosedur, Formulir..."
+                      className="flex-1 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 transition-all"
+                    />
+                    {!editItem && nameList.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => removeName(i)}
+                        className="p-2.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors shrink-0"
+                      >
+                        <XMarkIcon className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+              {/* Tombol tambah nama — hanya saat create */}
+              {!editItem && (
+                <button
+                  type="button"
+                  onClick={addName}
+                  className="mt-2 flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-700 transition-colors"
+                >
+                  <PlusIcon className="w-3.5 h-3.5" />
+                  Tambah nama lagi
+                </button>
+              )}
+            </div>
+
             {error && (
-              <div className="bg-red-50 border border-red-200 text-red-600 text-sm rounded-xl px-4 py-3">
+              <div className="bg-red-50 border border-red-200 text-red-600 text-sm rounded-xl px-4 py-3 whitespace-pre-line">
                 {error}
               </div>
             )}
+
             <div className="flex gap-2 justify-end pt-1">
               <button
                 type="button"
-                onClick={() => {
-                  setShowModal(false);
-                  setEditItem(null);
-                }}
+                onClick={closeModal}
                 className="px-4 py-2.5 text-sm font-medium border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 transition-all"
               >
                 Batal
@@ -568,7 +642,13 @@ export default function DocumentTypesTable({
                 disabled={loading}
                 className="px-5 py-2.5 text-sm font-bold bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-50 transition-all"
               >
-                {loading ? "Menyimpan..." : editItem ? "Update" : "Simpan"}
+                {loading
+                  ? "Menyimpan..."
+                  : editItem
+                  ? "Update"
+                  : nameList.filter((n) => n.trim()).length > 1
+                  ? `Simpan (${nameList.filter((n) => n.trim()).length})`
+                  : "Simpan"}
               </button>
             </div>
           </form>

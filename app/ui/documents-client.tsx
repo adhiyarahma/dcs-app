@@ -284,9 +284,10 @@ function DocumentGroupRow({
   cfg,
   isAdmin,
   setDeleteTarget,
-  // bulk select props
   selectedIds,
   onToggleSelect,
+  // ← TAMBAHAN: basePath
+  basePath,
 }: {
   group: { latest: Doc; history: Doc[] };
   isExpanded: boolean;
@@ -297,12 +298,12 @@ function DocumentGroupRow({
   setDeleteTarget: (d: Doc) => void;
   selectedIds: Set<string>;
   onToggleSelect: (id: string) => void;
+  basePath: string; // ← TAMBAHAN
 }) {
   const hasHistory = group.history.length > 0;
 
   const renderCells = (doc: Doc, isChild: boolean) => (
     <>
-      {/* Checkbox column */}
       {isAdmin && (
         <td className="pl-4 pr-2 py-4">
           <input
@@ -314,7 +315,6 @@ function DocumentGroupRow({
           />
         </td>
       )}
-
       <td className="px-6 py-4">
         <div className="flex items-center gap-2">
           {!isChild && (
@@ -361,13 +361,11 @@ function DocumentGroupRow({
           Rev. {doc.revision}
         </span>
       </td>
-
       {!categorySelected && (
         <td className="px-6 py-4">
           <span className="text-xs text-slate-500">{doc.category_name}</span>
         </td>
       )}
-
       <td className="px-6 py-4">
         <p className="font-mono text-xs text-slate-700">
           {doc.effective_date ? (
@@ -377,7 +375,6 @@ function DocumentGroupRow({
           )}
         </p>
       </td>
-
       {categorySelected && cfg.showDepartmentCol && (
         <td className="px-6 py-4">
           {doc.department_code ? (
@@ -435,7 +432,6 @@ function DocumentGroupRow({
           )}
         </td>
       )}
-
       {!categorySelected && (
         <td className="px-6 py-4">
           {doc.department_code ? (
@@ -447,7 +443,6 @@ function DocumentGroupRow({
           )}
         </td>
       )}
-
       <td className="px-6 py-4">
         <span
           className={clsx(
@@ -460,13 +455,13 @@ function DocumentGroupRow({
           {doc.status}
         </span>
       </td>
-
       {isAdmin && (
         <td className="px-6 py-4">
           <div className="flex justify-end gap-1.5">
             {doc.status === "terbaru" && (
+              // ← PERUBAHAN: pakai basePath
               <a
-                href={`/dashboard/documents/${doc.id}/edit`}
+                href={`${basePath}/${doc.id}/edit`}
                 className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors inline-flex"
               >
                 <PencilIcon className="w-4 h-4" />
@@ -522,6 +517,8 @@ export default function DocumentsClient({
   documentTypes,
   role,
   userId,
+  // ← TAMBAHAN: basePath
+  basePath = "/dashboard/documents",
 }: {
   documents: Doc[];
   categories: Category[];
@@ -529,7 +526,9 @@ export default function DocumentsClient({
   documentTypes: DocType[];
   role: string;
   userId: string;
+  basePath?: string; // ← TAMBAHAN
 }) {
+  console.log("basePath received:", basePath); // ← tambah ini
   const isAdmin = role === "admin";
   const [search, setSearch] = useState("");
   const [filterCategory, setFilterCategory] = useState("");
@@ -545,20 +544,22 @@ export default function DocumentsClient({
     {}
   );
   const [showExport, setShowExport] = useState(false);
-
-  // ── Bulk select state ──
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
 
-  const activeCategoryName =
-    categories.find((c) => c.id === filterCategory)?.name ?? "";
+  // Jika halaman per-kategori, otomatis set filter kategori
+  const isCategoryPage = categories.length === 1;
+  const activeCategoryName = isCategoryPage
+    ? categories[0].name
+    : categories.find((c) => c.id === filterCategory)?.name ?? "";
   const activeTypeName =
     documentTypes.find((t) => t.id === filterType)?.name ?? "";
   const cfg = getCategoryConfig(activeCategoryName, activeTypeName);
-  const categorySelected = !!filterCategory;
+  const categorySelected = isCategoryPage || !!filterCategory;
 
   const filteredTypes = documentTypes.filter(
-    (t) => t.category_id === filterCategory
+    (t) =>
+      t.category_id === (isCategoryPage ? categories[0].id : filterCategory)
   );
 
   function handleCategoryChange(val: string) {
@@ -578,14 +579,15 @@ export default function DocumentsClient({
     setExpandedGroups((prev) => ({ ...prev, [docNumber]: !prev[docNumber] }));
   };
 
-  // ── Grouped + sorted + paginated docs ──
   const groupedDocs = useMemo(() => {
     let filtered = documents.filter((d) => {
       const matchSearch =
         !search ||
         d.title.toLowerCase().includes(search.toLowerCase()) ||
         d.doc_number.toLowerCase().includes(search.toLowerCase());
-      const matchCat = !filterCategory || d.category_id === filterCategory;
+      const matchCat = isCategoryPage
+        ? true
+        : !filterCategory || d.category_id === filterCategory;
       const matchType = !filterType || d.type_id === filterType;
       const matchDept = !filterDept || d.department_id === filterDept;
       const matchStatus = !filterStatus || d.status === filterStatus;
@@ -632,9 +634,9 @@ export default function DocumentsClient({
     filterStatus,
     sortKey,
     sortOrder,
+    isCategoryPage,
   ]);
 
-  // ── Semua ID yang tampil di halaman saat ini (termasuk history yang expanded) ──
   const visibleIdsOnPage = useMemo(() => {
     const ids: string[] = [];
     const paginated = groupedDocs.slice(
@@ -650,16 +652,6 @@ export default function DocumentsClient({
     return ids;
   }, [groupedDocs, currentPage, expandedGroups]);
 
-  // ── Semua ID dari seluruh hasil filter (untuk "pilih semua") ──
-  const allFilteredIds = useMemo(() => {
-    const ids: string[] = [];
-    groupedDocs.forEach((group) => {
-      ids.push(group.latest.id);
-      group.history.forEach((h) => ids.push(h.id));
-    });
-    return ids;
-  }, [groupedDocs]);
-
   const isAllPageSelected =
     visibleIdsOnPage.length > 0 &&
     visibleIdsOnPage.every((id) => selectedIds.has(id));
@@ -668,14 +660,12 @@ export default function DocumentsClient({
 
   function toggleSelectAll() {
     if (isAllPageSelected) {
-      // Unselect semua di halaman ini
       setSelectedIds((prev) => {
         const next = new Set(prev);
         visibleIdsOnPage.forEach((id) => next.delete(id));
         return next;
       });
     } else {
-      // Select semua di halaman ini
       setSelectedIds((prev) => {
         const next = new Set(prev);
         visibleIdsOnPage.forEach((id) => next.add(id));
@@ -697,7 +687,6 @@ export default function DocumentsClient({
     setSelectedIds(new Set());
   }
 
-  // ── Delete single ──
   async function handleDelete() {
     if (!deleteTarget) return;
     setLoading(true);
@@ -711,7 +700,6 @@ export default function DocumentsClient({
     });
   }
 
-  // ── Delete bulk ──
   async function handleBulkDelete() {
     setLoading(true);
     await Promise.all(
@@ -723,9 +711,8 @@ export default function DocumentsClient({
   }
 
   const handleSort = (key: SortKey) => {
-    if (sortKey === key) {
-      setSortOrder(sortOrder === "asc" ? "desc" : "asc");
-    } else {
+    if (sortKey === key) setSortOrder(sortOrder === "asc" ? "desc" : "asc");
+    else {
       setSortKey(key);
       setSortOrder("asc");
     }
@@ -774,7 +761,9 @@ export default function DocumentsClient({
   );
 
   const hasAnyFilter =
-    filterCategory || filterType || filterDept || filterStatus;
+    (!isCategoryPage &&
+      (filterCategory || filterType || filterDept || filterStatus)) ||
+    (isCategoryPage && (filterType || filterDept || filterStatus));
   const totalDokumen = documents.length;
   const totalTerbaru = documents.filter((d) => d.status === "terbaru").length;
   const totalKadaluarsa = documents.filter(
@@ -782,7 +771,7 @@ export default function DocumentsClient({
   ).length;
 
   const colCount =
-    (isAdmin ? 1 : 0) + // checkbox col
+    (isAdmin ? 1 : 0) +
     5 +
     (categorySelected
       ? (cfg.showDepartmentCol ? 1 : 0) +
@@ -793,7 +782,6 @@ export default function DocumentsClient({
     1 +
     (isAdmin ? 1 : 0);
 
-  // Mobile card
   const renderMobileCard = (doc: Doc, isChild: boolean = false) => (
     <div
       key={doc.id}
@@ -803,7 +791,7 @@ export default function DocumentsClient({
           "ring-2 ring-red-400 border-red-300 bg-red-50",
         !selectedIds.has(doc.id) &&
           isChild &&
-          "ml-4 border-dashed before:absolute before:-left-4 before:top-1/2 before:-translate-y-1/2 before:w-3 before:h-px before:bg-slate-300 bg-slate-50/70 border-slate-200",
+          "ml-4 border-dashed bg-slate-50/70 border-slate-200",
         !selectedIds.has(doc.id) &&
           !isChild &&
           doc.status === "terbaru" &&
@@ -849,55 +837,14 @@ export default function DocumentsClient({
             <p className="text-[11px] text-slate-400 mt-0.5">
               {doc.category_name} · {doc.type_name}
             </p>
-
-            <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-2">
-              {doc.department_code && (
-                <span className="text-[10px] text-slate-400">
-                  Dept:{" "}
-                  <span className="font-medium text-slate-600">
-                    {doc.department_code}
-                  </span>
-                </span>
-              )}
-              {categorySelected &&
-                cfg.showRevisionDateCol &&
-                doc.revision_date &&
-                !doc.type_name.toLowerCase().includes("msds benang") && (
-                  <span className="text-[10px] text-slate-400">
-                    Tgl Revisi:{" "}
-                    <span className="font-medium text-slate-600">
-                      {new Date(doc.revision_date).toLocaleDateString("id-ID")}
-                    </span>
-                  </span>
-                )}
-              {categorySelected && cfg.showExpiryDateCol && doc.expiry_date && (
-                <span className="text-[10px] text-slate-400">
-                  Berlaku s/d:{" "}
-                  <span className="font-medium text-slate-600">
-                    {new Date(doc.expiry_date).toLocaleDateString("id-ID")}
-                  </span>
-                </span>
-              )}
-              {categorySelected &&
-                cfg.showProductionTypeCol &&
-                doc.production_type && (
-                  <span className="text-[10px] text-slate-400">
-                    Prod:{" "}
-                    <span className="font-medium text-slate-600">
-                      {PRODUCTION_TYPE_LABEL[doc.production_type] ??
-                        doc.production_type}
-                    </span>
-                  </span>
-                )}
-            </div>
           </div>
         </div>
-
         {isAdmin && (
           <div className="flex gap-1 shrink-0">
             {doc.status === "terbaru" && (
+              // ← PERUBAHAN: pakai basePath
               <a
-                href={`/dashboard/documents/${doc.id}/edit`}
+                href={`${basePath}/${doc.id}/edit`}
                 className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors inline-flex"
               >
                 <PencilIcon className="w-4 h-4" />
@@ -981,18 +928,19 @@ export default function DocumentsClient({
             onClick={() => setShowExport(true)}
             className="px-4 py-2.5 text-sm font-bold border border-slate-200 text-slate-700 rounded-xl hover:bg-slate-50 transition-all flex items-center justify-center gap-2"
           >
-            <DocumentTextIcon className="w-4 h-4" />
-            Export Excel
+            <DocumentTextIcon className="w-4 h-4" /> Export Excel
           </button>
           {isAdmin && (
+            // ← PERUBAHAN: pakai basePath
             <a
-              href="/dashboard/documents/new"
+              href={`${basePath}/new`}
               className="flex items-center justify-center gap-2 bg-slate-900 text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:bg-slate-800 transition-all active:scale-95 shrink-0"
             >
               <PlusIcon className="w-4 h-4" /> Tambah Dokumen
             </a>
           )}
-          {isAdmin && (
+          {/* Trash hanya tampil di halaman utama documents */}
+          {isAdmin && basePath === "/dashboard/documents" && (
             <a
               href="/dashboard/documents/trash"
               className="flex items-center justify-center gap-2 bg-red-800 text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:bg-red-700 transition-all active:scale-95 shrink-0"
@@ -1003,22 +951,25 @@ export default function DocumentsClient({
         </div>
 
         <div className="flex flex-wrap gap-2 items-center">
-          <div className="relative">
-            <FunnelIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-            <select
-              value={filterCategory}
-              onChange={(e) => handleCategoryChange(e.target.value)}
-              className="pl-8 pr-8 py-2 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-600 outline-none focus:border-blue-500 transition-all appearance-none cursor-pointer"
-            >
-              <option value="">Semua Kategori</option>
-              {categories.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-            <ChevronDownIcon className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400 pointer-events-none" />
-          </div>
+          {/* Filter kategori hanya tampil jika bukan halaman per-kategori */}
+          {!isCategoryPage && (
+            <div className="relative">
+              <FunnelIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+              <select
+                value={filterCategory}
+                onChange={(e) => handleCategoryChange(e.target.value)}
+                className="pl-8 pr-8 py-2 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-600 outline-none focus:border-blue-500 transition-all appearance-none cursor-pointer"
+              >
+                <option value="">Semua Kategori</option>
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+              <ChevronDownIcon className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400 pointer-events-none" />
+            </div>
+          )}
 
           {categorySelected && (
             <div className="relative">
@@ -1060,22 +1011,20 @@ export default function DocumentsClient({
             </div>
           )}
 
-          {categorySelected && (
-            <div className="relative">
-              <select
-                value={filterStatus}
-                onChange={(e) =>
-                  handleFilterChange(setFilterStatus, e.target.value)
-                }
-                className="px-3 pr-8 py-2 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-600 outline-none focus:border-blue-500 transition-all appearance-none cursor-pointer"
-              >
-                <option value="">Semua Status</option>
-                <option value="terbaru">Terbaru</option>
-                <option value="kadaluarsa">Kadaluarsa</option>
-              </select>
-              <ChevronDownIcon className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400 pointer-events-none" />
-            </div>
-          )}
+          <div className="relative">
+            <select
+              value={filterStatus}
+              onChange={(e) =>
+                handleFilterChange(setFilterStatus, e.target.value)
+              }
+              className="px-3 pr-8 py-2 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-600 outline-none focus:border-blue-500 transition-all appearance-none cursor-pointer"
+            >
+              <option value="">Semua Status</option>
+              <option value="terbaru">Terbaru</option>
+              <option value="kadaluarsa">Kadaluarsa</option>
+            </select>
+            <ChevronDownIcon className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400 pointer-events-none" />
+          </div>
 
           {hasAnyFilter && (
             <button
@@ -1094,60 +1043,7 @@ export default function DocumentsClient({
         </div>
       </div>
 
-      {/* Summary count */}
-      {hasAnyFilter && (
-        <div className="flex items-center gap-2 text-xs flex-wrap">
-          <span className="text-slate-500">Menampilkan</span>
-          <span className="font-bold text-slate-800">{groupedDocs.length}</span>
-          <span className="text-slate-500">nomor dokumen</span>
-          <span className="text-slate-300">·</span>
-          <span className="font-bold text-slate-800">
-            {groupedDocs.reduce((acc, g) => acc + 1 + g.history.length, 0)}
-          </span>
-          <span className="text-slate-500">total revisi</span>
-          {filterCategory && (
-            <>
-              <span className="text-slate-300">·</span>
-              <span className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded-full font-medium">
-                {activeCategoryName}
-              </span>
-            </>
-          )}
-          {filterType && (
-            <>
-              <span className="text-slate-300">›</span>
-              <span className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded-full font-medium">
-                {activeTypeName}
-              </span>
-            </>
-          )}
-          {filterDept && (
-            <>
-              <span className="text-slate-300">›</span>
-              <span className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded-full font-medium">
-                {departments.find((d) => d.id === filterDept)?.code}
-              </span>
-            </>
-          )}
-          {filterStatus && (
-            <>
-              <span className="text-slate-300">›</span>
-              <span
-                className={clsx(
-                  "px-2 py-0.5 rounded-full font-medium",
-                  filterStatus === "terbaru"
-                    ? "bg-emerald-50 text-emerald-700"
-                    : "bg-amber-50 text-amber-700"
-                )}
-              >
-                {filterStatus}
-              </span>
-            </>
-          )}
-        </div>
-      )}
-
-      {/* ── Bulk action bar — muncul kalau ada yang dipilih ── */}
+      {/* Bulk action bar */}
       {isAdmin && selectedIds.size > 0 && (
         <div className="flex items-center justify-between gap-3 px-4 py-3 bg-red-50 border border-red-200 rounded-2xl">
           <div className="flex items-center gap-3">
@@ -1165,19 +1061,17 @@ export default function DocumentsClient({
             onClick={() => setShowBulkDeleteModal(true)}
             className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white text-sm font-bold rounded-xl hover:bg-red-700 transition-all active:scale-95"
           >
-            <TrashIcon className="w-4 h-4" />
-            Hapus {selectedIds.size} Dokumen
+            <TrashIcon className="w-4 h-4" /> Hapus {selectedIds.size} Dokumen
           </button>
         </div>
       )}
 
-      {/* Table — desktop */}
+      {/* Table desktop */}
       <div className="hidden sm:block bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full border-collapse">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-100">
-                {/* Checkbox header */}
                 {isAdmin && (
                   <th className="pl-4 pr-2 py-3 w-10">
                     <input
@@ -1188,7 +1082,6 @@ export default function DocumentsClient({
                       }}
                       onChange={toggleSelectAll}
                       className="w-4 h-4 rounded border-slate-300 text-red-600 accent-red-600 cursor-pointer"
-                      title="Pilih semua di halaman ini"
                     />
                   </th>
                 )}
@@ -1251,6 +1144,7 @@ export default function DocumentsClient({
                   setDeleteTarget={setDeleteTarget}
                   selectedIds={selectedIds}
                   onToggleSelect={toggleSelectOne}
+                  basePath={basePath}
                 />
               ))}
             </tbody>
@@ -1263,9 +1157,8 @@ export default function DocumentsClient({
         />
       </div>
 
-      {/* Card list — mobile */}
+      {/* Card list mobile */}
       <div className="sm:hidden space-y-3">
-        {/* Mobile select all */}
         {isAdmin && paginatedGroupsMobile.length > 0 && (
           <div className="flex items-center gap-2 px-1">
             <input
@@ -1282,7 +1175,6 @@ export default function DocumentsClient({
             </span>
           </div>
         )}
-
         {paginatedGroupsMobile.length === 0 && (
           <div className="bg-white border border-slate-200 rounded-2xl p-6 text-center text-slate-400 text-sm">
             Tidak ada dokumen ditemukan.
@@ -1291,7 +1183,6 @@ export default function DocumentsClient({
         {paginatedGroupsMobile.map((group) => {
           const isExpanded = !!expandedGroups[group.latest.doc_number];
           const hasHistory = group.history.length > 0;
-
           return (
             <div key={group.latest.doc_number} className="space-y-1.5">
               {renderMobileCard(group.latest, false)}
@@ -1315,7 +1206,6 @@ export default function DocumentsClient({
             </div>
           );
         })}
-
         <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
           <Pagination
             currentPage={currentPage}
@@ -1325,7 +1215,6 @@ export default function DocumentsClient({
         </div>
       </div>
 
-      {/* Single delete modal */}
       {deleteTarget && (
         <DeleteModal
           doc={deleteTarget}
@@ -1334,8 +1223,6 @@ export default function DocumentsClient({
           loading={loading}
         />
       )}
-
-      {/* Bulk delete modal */}
       {showBulkDeleteModal && (
         <BulkDeleteModal
           count={selectedIds.size}
@@ -1344,7 +1231,6 @@ export default function DocumentsClient({
           loading={loading}
         />
       )}
-
       {showExport && (
         <ExportDocumentModal
           categories={categories}

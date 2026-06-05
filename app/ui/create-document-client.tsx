@@ -14,13 +14,14 @@ interface Props {
   departments: Department[];
   documentTypes: DocType[];
   userId: string;
+  defaultCategoryId?: string;
+  redirectPath?: string;
 }
 
 function getFieldConfig(categoryName: string, typeName: string) {
   const isMSDS = categoryName.toLowerCase().includes("msds");
   const isMSDSKimia = isMSDS && typeName.toLowerCase().includes("kimia");
   const isMSDSBenang = isMSDS && typeName.toLowerCase().includes("benang");
-
   return {
     showDepartment: !isMSDS,
     showRevisionDate: isMSDSKimia,
@@ -40,24 +41,30 @@ export default function CreateDocumentClient({
   departments,
   documentTypes,
   userId,
+  defaultCategoryId = "",
+  redirectPath = "/dashboard/documents",
 }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const [selectedCategoryId, setSelectedCategoryId] = useState("");
+  const [selectedCategoryId, setSelectedCategoryId] =
+    useState(defaultCategoryId);
   const [selectedTypeId, setSelectedTypeId] = useState("");
-  const [showImport, setShowImport] = useState(false); // ✅ dipindah ke dalam komponen
+  const [showImport, setShowImport] = useState(false);
 
   const filteredTypes = documentTypes.filter(
     (t) => t.category_id === selectedCategoryId
   );
   const selectedCategory = categories.find((c) => c.id === selectedCategoryId);
   const selectedType = documentTypes.find((t) => t.id === selectedTypeId);
-
+  console.log("selectedCategory:", selectedCategory);
+  console.log("selectedType:", selectedType);
   const fieldConfig = getFieldConfig(
     selectedCategory?.name ?? "",
     selectedType?.name ?? ""
   );
+  console.log("filteredTypes:", filteredTypes);
+  const isCategoryLocked = !!defaultCategoryId;
 
   function handleCategoryChange(e: React.ChangeEvent<HTMLSelectElement>) {
     setSelectedCategoryId(e.target.value);
@@ -68,20 +75,19 @@ export default function CreateDocumentClient({
     e.preventDefault();
     setError(null);
     const formData = new FormData(e.currentTarget);
-
     startTransition(async () => {
       const result = await createDocument(formData);
       if (result?.error) {
         setError(result.error);
         return;
       }
-      router.push("/dashboard/documents");
+      console.log("redirectPath value:", redirectPath);
+      window.location.href = redirectPath;
     });
   }
 
   return (
     <>
-      {/* ── Tombol Import — di atas form ── */}
       <div className="flex justify-end mb-4">
         <button
           type="button"
@@ -108,7 +114,6 @@ export default function CreateDocumentClient({
       <form onSubmit={handleSubmit} className="space-y-6">
         <input type="hidden" name="uploaded_by" value={userId} />
 
-        {/* No. Dokumen & Revisi */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1.5">
@@ -136,7 +141,6 @@ export default function CreateDocumentClient({
           </div>
         </div>
 
-        {/* Judul */}
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-1.5">
             Judul Dokumen <span className="text-red-500">*</span>
@@ -149,26 +153,41 @@ export default function CreateDocumentClient({
           />
         </div>
 
-        {/* Kategori & Jenis */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1.5">
               Kategori <span className="text-red-500">*</span>
             </label>
-            <select
-              name="category_id"
-              required
-              value={selectedCategoryId}
-              onChange={handleCategoryChange}
-              className="w-full border border-slate-300 rounded-lg px-3.5 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 transition-all bg-white"
-            >
-              <option value="">Pilih Kategori</option>
-              {categories.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
+            {isCategoryLocked ? (
+              <>
+                <input
+                  type="text"
+                  value={selectedCategory?.name ?? ""}
+                  readOnly
+                  className="w-full border border-slate-200 bg-slate-50 rounded-lg px-3.5 py-2.5 text-sm text-slate-500 cursor-not-allowed"
+                />
+                <input
+                  type="hidden"
+                  name="category_id"
+                  value={selectedCategoryId}
+                />
+              </>
+            ) : (
+              <select
+                name="category_id"
+                required
+                value={selectedCategoryId}
+                onChange={handleCategoryChange}
+                className="w-full border border-slate-300 rounded-lg px-3.5 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 transition-all bg-white"
+              >
+                <option value="">Pilih Kategori</option>
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1.5">
@@ -192,7 +211,6 @@ export default function CreateDocumentClient({
           </div>
         </div>
 
-        {/* Departemen — hanya untuk QESH */}
         {fieldConfig.showDepartment && (
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1.5">
@@ -213,7 +231,6 @@ export default function CreateDocumentClient({
           </div>
         )}
 
-        {/* Production Type — hanya MSDS Kimia */}
         {fieldConfig.showProductionType && (
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1.5">
@@ -234,7 +251,6 @@ export default function CreateDocumentClient({
           </div>
         )}
 
-        {/* Tanggal Efektif & kondisional */}
         <div
           className={`grid grid-cols-1 gap-4 ${
             fieldConfig.showRevisionDate && fieldConfig.showExpiryDate
@@ -254,7 +270,6 @@ export default function CreateDocumentClient({
               className="w-full border border-slate-300 rounded-lg px-3.5 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 transition-all"
             />
           </div>
-
           {fieldConfig.showRevisionDate && (
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1.5">
@@ -268,7 +283,6 @@ export default function CreateDocumentClient({
               />
             </div>
           )}
-
           {fieldConfig.showExpiryDate && (
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1.5">
@@ -283,7 +297,6 @@ export default function CreateDocumentClient({
           )}
         </div>
 
-        {/* Info field dinamis */}
         {selectedCategoryId && selectedTypeId && (
           <div className="bg-blue-50 border border-blue-100 rounded-lg px-4 py-3 text-xs text-blue-600">
             <span className="font-semibold">
@@ -297,17 +310,15 @@ export default function CreateDocumentClient({
           </div>
         )}
 
-        {/* Error */}
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-600 text-sm rounded-lg px-4 py-3">
             {error}
           </div>
         )}
 
-        {/* Actions */}
         <div className="flex items-center justify-between pt-2 border-t border-slate-100">
           <a
-            href="/dashboard/documents"
+            href={redirectPath}
             className="text-sm text-slate-400 hover:text-slate-600 transition-colors"
           >
             ← Batal
@@ -322,14 +333,13 @@ export default function CreateDocumentClient({
         </div>
       </form>
 
-      {/* Modal Import */}
       {showImport && (
         <ImportDocumentModal
           categories={categories}
           documentTypes={documentTypes}
           uploadedBy={userId}
           onClose={() => setShowImport(false)}
-          onSuccess={() => router.push("/dashboard/documents")}
+          onSuccess={() => router.push(redirectPath)}
         />
       )}
     </>

@@ -4,6 +4,8 @@ import { supabaseAdmin } from "@/app/lib/supabase";
 import DocumentsClient from "@/app/ui/documents-client";
 import { Breadcrumb } from "@/app/ui/breadcrumb";
 
+const CATEGORY_ID = "4f201927-3332-4123-904e-0705939f38d8";
+
 export default async function Page() {
   const session = await auth();
   const role = (session?.user as any)?.role ?? "viewer";
@@ -14,18 +16,17 @@ export default async function Page() {
     getDocumentTypes(),
   ]);
 
-  // Ambil semua kategori
-  const { data: categoriesData } = await supabaseAdmin
+  // Filter categories hanya untuk kategori ini
+  const { data: categoryData } = await supabaseAdmin
     .from("categories")
     .select("id, name")
-    .order("name");
+    .eq("id", CATEGORY_ID)
+    .single();
 
-  const categories = (categoriesData ?? []).map((c) => ({
-    id: c.id,
-    name: c.name,
-  }));
+  const categories = categoryData
+    ? [{ id: categoryData.id, name: categoryData.name }]
+    : [];
 
-  // Ambil semua dokumen dari semua kategori
   const PAGE = 1000;
   let rawDocs: any[] = [];
   let from = 0;
@@ -42,6 +43,7 @@ export default async function Page() {
         departments(code, name),
         users(name)`
       )
+      .eq("category_id", CATEGORY_ID)
       .in("status", ["terbaru", "kadaluarsa"])
       .order("doc_number")
       .range(from, from + PAGE - 1);
@@ -52,7 +54,7 @@ export default async function Page() {
     from += PAGE;
   }
 
-  const documents = rawDocs.map((d: any) => ({
+  const documents = (rawDocs ?? []).map((d: any) => ({
     id: d.id,
     doc_number: d.doc_number,
     title: d.title,
@@ -77,12 +79,15 @@ export default async function Page() {
   return (
     <div className="max-w-8xl mx-auto py-2 px-4">
       <Breadcrumb
-        items={[{ label: "Dokumen", href: "#" }, { label: "Semua Dokumen" }]}
+        items={[
+          { label: "Kelola Dokumen", href: "#" },
+          { label: "Dokumen Eksternal" },
+        ]}
       />
       <div className="mb-6 mt-4">
-        <h1 className="text-2xl font-bold text-slate-800">Semua Dokumen</h1>
+        <h1 className="text-2xl font-bold text-slate-800">Dokumen Eksternal</h1>
         <p className="text-sm text-slate-400 mt-1">
-          Daftar seluruh dokumen perusahaan dari semua kategori
+          Kelola dokumen dari pihak eksternal
         </p>
       </div>
       <DocumentsClient
@@ -90,9 +95,9 @@ export default async function Page() {
         categories={categories}
         departments={departments}
         documentTypes={documentTypes}
-        role="viewer"
+        role={role}
         userId={userId}
-        basePath="/dashboard/documents"
+        basePath="/dashboard/dokumen-eksternal"
       />
     </div>
   );

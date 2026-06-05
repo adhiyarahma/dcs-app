@@ -468,6 +468,9 @@ export async function createDocument(formData: FormData) {
       return { error: "Gagal membuat dokumen." };
     }
     revalidatePath("/dashboard/documents");
+    revalidatePath("/dashboard/dokumen-qesh");
+    revalidatePath("/dashboard/msds");
+    revalidatePath("/dashboard/dokumen-eksternal");
     return { success: true, id: data.id };
   } catch {
     return { error: "Gagal membuat dokumen." };
@@ -509,6 +512,9 @@ export async function updateDocument(id: string, formData: FormData) {
       return { error: "Gagal mengupdate dokumen." };
     }
     revalidatePath("/dashboard/documents");
+    revalidatePath("/dashboard/dokumen-qesh");
+    revalidatePath("/dashboard/msds");
+    revalidatePath("/dashboard/dokumen-eksternal");
     return { success: true };
   } catch {
     return { error: "Gagal mengupdate dokumen." };
@@ -524,6 +530,9 @@ export async function permanentDeleteDocument(id: string) {
       .eq("id", id);
     if (error) return { error: "Gagal menghapus dokumen." };
     revalidatePath("/dashboard/documents");
+    revalidatePath("/dashboard/dokumen-qesh");
+    revalidatePath("/dashboard/msds");
+    revalidatePath("/dashboard/dokumen-eksternal");
     return { success: true };
   } catch {
     return { error: "Gagal menghapus dokumen." };
@@ -568,8 +577,10 @@ export async function restoreDocument(id: string) {
       if (restoreOldError)
         return { error: "Gagal memulihkan riwayat dokumen lama." };
     }
-
     revalidatePath("/dashboard/documents");
+    revalidatePath("/dashboard/dokumen-qesh");
+    revalidatePath("/dashboard/msds");
+    revalidatePath("/dashboard/dokumen-eksternal");
     revalidatePath("/dashboard/trash");
     return { success: true };
   } catch {
@@ -597,6 +608,9 @@ export async function saveDocumentFile(
     );
     if (error) return { error: "Gagal menyimpan file." };
     revalidatePath("/dashboard/documents");
+    revalidatePath("/dashboard/dokumen-qesh");
+    revalidatePath("/dashboard/msds");
+    revalidatePath("/dashboard/dokumen-eksternal");
     return { success: true };
   } catch {
     return { error: "Gagal menyimpan file." };
@@ -615,6 +629,9 @@ export async function deleteDocumentFile(
       .eq("file_label", fileLabel);
     if (error) return { error: "Gagal menghapus file." };
     revalidatePath("/dashboard/documents");
+    revalidatePath("/dashboard/dokumen-qesh");
+    revalidatePath("/dashboard/msds");
+    revalidatePath("/dashboard/dokumen-eksternal");
     return { success: true };
   } catch {
     return { error: "Gagal menghapus file." };
@@ -654,6 +671,9 @@ export async function correctDocument(id: string, formData: FormData) {
       if (error) return { error: "Gagal mengubah status dokumen." };
 
       revalidatePath("/dashboard/documents");
+      revalidatePath("/dashboard/dokumen-qesh");
+      revalidatePath("/dashboard/msds");
+      revalidatePath("/dashboard/dokumen-eksternal");
       return { success: true };
     }
 
@@ -674,6 +694,9 @@ export async function correctDocument(id: string, formData: FormData) {
     if (error) return { error: "Gagal menyimpan koreksi dokumen." };
 
     revalidatePath("/dashboard/documents");
+    revalidatePath("/dashboard/dokumen-qesh");
+    revalidatePath("/dashboard/msds");
+    revalidatePath("/dashboard/dokumen-eksternal");
     return { success: true };
   } catch {
     return { error: "Gagal menyimpan koreksi dokumen." };
@@ -754,6 +777,9 @@ export async function reviseDocument(
     }
 
     revalidatePath("/dashboard/documents");
+    revalidatePath("/dashboard/dokumen-qesh");
+    revalidatePath("/dashboard/msds");
+    revalidatePath("/dashboard/dokumen-eksternal");
     return { success: true, newId: data.id };
   } catch {
     return { error: "Gagal memproses revisi dokumen." };
@@ -1084,6 +1110,9 @@ export async function importDocuments(
     }
 
     revalidatePath("/dashboard/documents");
+    revalidatePath("/dashboard/dokumen-qesh");
+    revalidatePath("/dashboard/msds");
+    revalidatePath("/dashboard/dokumen-eksternal");
     return { success: true, count: rows.length };
   } catch {
     return { success: false, error: "Gagal mengimport dokumen." };
@@ -1312,4 +1341,238 @@ export async function fetchNextFormNumber(): Promise<string> {
 
   const nextNum = String((count ?? 0) + 1).padStart(3, "0");
   return `${nextNum}/DCC/${mm}/${yy}`;
+}
+
+const REVALIDATE_PATHS = [
+  "/dashboard/dokumen-eksternal",
+  "/dashboard/documents",
+];
+
+function revalidateAll() {
+  REVALIDATE_PATHS.forEach((p) => revalidatePath(p));
+}
+
+// ============================================================
+// CREATE EXTERNAL DOCUMENT
+// ============================================================
+export async function createExternalDocument(formData: FormData) {
+  const doc_number = (formData.get("doc_number") as string)?.trim();
+  const title = (formData.get("title") as string)?.trim();
+  const category_id = formData.get("category_id") as string;
+  const type_id = formData.get("type_id") as string;
+  const uploaded_by = formData.get("uploaded_by") as string;
+  const type_name = (formData.get("type_name") as string)?.trim();
+
+  // Field dari tabel documents (sesuai jenis)
+  const effective_date = (formData.get("effective_date") as string) || null; // tanggal untuk COA/DIU/TES
+  const expiry_date = (formData.get("expiry_date") as string) || null; // masa berlaku KAL
+  const revision_raw = formData.get("revision") as string;
+  const revision = revision_raw ? parseInt(revision_raw) : 0;
+  const status = (formData.get("status") as string) || "terbaru";
+
+  if (!doc_number || !title || !category_id || !type_id)
+    return { error: "Field wajib belum lengkap." };
+
+  try {
+    // 1. Insert ke tabel documents
+    const { data: doc, error: docError } = await supabaseAdmin
+      .from("documents")
+      .insert({
+        doc_number,
+        title,
+        category_id,
+        type_id,
+        revision,
+        effective_date,
+        expiry_date,
+        status,
+        uploaded_by,
+      })
+      .select("id")
+      .single();
+
+    if (docError) {
+      if (docError.code === "23505")
+        return { error: "Nomor dokumen sudah ada." };
+      return { error: "Gagal membuat dokumen." };
+    }
+
+    const document_id = doc.id;
+    const isKal = type_name?.toLowerCase() === "kal";
+
+    // 2. Insert ke document_eksternal (untuk semua jenis kecuali KAL murni)
+    const source = (formData.get("source") as string)?.trim() || null;
+    const test_report_no =
+      (formData.get("test_report_no") as string)?.trim() || null;
+
+    if (source !== null || test_report_no !== null) {
+      const { error: extError } = await supabaseAdmin
+        .from("document_external")
+        .insert({
+          document_id, // Pastikan tipe data ID dari step 1 pas dengan kolom ini
+          source,
+          test_report_no,
+        });
+
+      if (extError) {
+        // TAMPILKAN DI CONSOLE SERVER AGAR ANDA TAHU ALASANNYA
+        console.error("❌ ERROR DOCUMENT_EKSTERNAL:", extError);
+
+        return {
+          error: `Gagal menyimpan data eksternal. (Kode: ${extError.code} - ${extError.message})`,
+        };
+      }
+    }
+
+    // 3. Insert ke document_eksternal_kal (khusus KAL)
+    if (isKal) {
+      const no_order = (formData.get("no_order") as string)?.trim() || null;
+      const item_type = (formData.get("item_type") as string)?.trim() || null;
+      const brand = (formData.get("brand") as string)?.trim() || null;
+      const model = (formData.get("model") as string)?.trim() || null;
+      const serial_no = (formData.get("serial_no") as string)?.trim() || null;
+      const calibration_date =
+        (formData.get("calibration_date") as string) || null;
+
+      const { error: kalError } = await supabaseAdmin
+        .from("document_eksternal_kal")
+        .insert({
+          document_id,
+          no_order,
+          item_type,
+          brand,
+          model,
+          serial_no,
+          calibration_date,
+        });
+
+      if (kalError)
+        return { error: "Dokumen tersimpan tapi gagal menyimpan data KAL." };
+    }
+
+    revalidateAll();
+    return { success: true, id: document_id };
+  } catch {
+    return { error: "Gagal membuat dokumen eksternal." };
+  }
+}
+
+// ============================================================
+// UPDATE EXTERNAL DOCUMENT
+// ============================================================
+export async function updateExternalDocument(id: string, formData: FormData) {
+  const title = (formData.get("title") as string)?.trim();
+  const doc_number = (formData.get("doc_number") as string)?.trim();
+  const type_id = formData.get("type_id") as string;
+  const type_name = (formData.get("type_name") as string)?.trim();
+  const effective_date = (formData.get("effective_date") as string) || null;
+  const expiry_date = (formData.get("expiry_date") as string) || null;
+  const revision_raw = formData.get("revision") as string;
+  const revision = revision_raw ? parseInt(revision_raw) : 0;
+  const status = (formData.get("status") as string) || "terbaru";
+
+  if (!title || !type_id) return { error: "Field wajib belum lengkap." };
+
+  const isKal = type_name?.toLowerCase() === "kal";
+
+  try {
+    // 1. Update tabel documents
+    const { error: docError } = await supabaseAdmin
+      .from("documents")
+      .update({
+        title,
+        doc_number,
+        type_id,
+        revision,
+        effective_date,
+        expiry_date,
+        status,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", id);
+
+    if (docError) return { error: "Gagal mengupdate dokumen." };
+
+    // 2. Upsert document_eksternal
+    const source = (formData.get("source") as string)?.trim() || null;
+    const test_report_no =
+      (formData.get("test_report_no") as string)?.trim() || null;
+
+    if (!isKal) {
+      const { error: extError } = await supabaseAdmin
+        .from("document_eksternal")
+        .upsert(
+          { document_id: id, source, test_report_no },
+          { onConflict: "document_id" }
+        );
+
+      if (extError)
+        return { error: "Dokumen terupdate tapi gagal update data eksternal." };
+    }
+
+    // 3. Upsert document_eksternal_kal
+    if (isKal) {
+      const no_order = (formData.get("no_order") as string)?.trim() || null;
+      const item_type = (formData.get("item_type") as string)?.trim() || null;
+      const brand = (formData.get("brand") as string)?.trim() || null;
+      const model = (formData.get("model") as string)?.trim() || null;
+      const serial_no = (formData.get("serial_no") as string)?.trim() || null;
+      const calibration_date =
+        (formData.get("calibration_date") as string) || null;
+
+      const { error: kalError } = await supabaseAdmin
+        .from("document_eksternal_kal")
+        .upsert(
+          {
+            document_id: id,
+            no_order,
+            item_type,
+            brand,
+            model,
+            serial_no,
+            calibration_date,
+          },
+          { onConflict: "document_id" }
+        );
+
+      if (kalError)
+        return { error: "Dokumen terupdate tapi gagal update data KAL." };
+    }
+
+    revalidateAll();
+    return { success: true };
+  } catch {
+    return { error: "Gagal mengupdate dokumen eksternal." };
+  }
+}
+
+// ============================================================
+// DELETE EXTERNAL DOCUMENT
+// ============================================================
+export async function deleteExternalDocument(id: string) {
+  try {
+    // document_eksternal dan document_eksternal_kal akan terhapus via CASCADE
+    // kalau belum ada CASCADE, hapus manual dulu
+    await supabaseAdmin
+      .from("document_eksternal")
+      .delete()
+      .eq("document_id", id);
+
+    await supabaseAdmin
+      .from("document_eksternal_kal")
+      .delete()
+      .eq("document_id", id);
+
+    const { error } = await supabaseAdmin
+      .from("documents")
+      .delete()
+      .eq("id", id);
+
+    if (error) return { error: "Gagal menghapus dokumen." };
+
+    revalidateAll();
+    return { success: true };
+  } catch {
+    return { error: "Gagal menghapus dokumen eksternal." };
+  }
 }

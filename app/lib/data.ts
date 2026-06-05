@@ -256,7 +256,7 @@ export async function fetchDeletedDocuments() {
 // ============================================================
 
 export async function getDistributions() {
-  const { data } = await supabaseAdmin
+  const { data, error } = await supabaseAdmin
     .from("distributions")
     .select(
       `
@@ -270,12 +270,20 @@ export async function getDistributions() {
         documents(id, doc_number, title, revision, document_types(name)),
         distribution_recipients(
           id, qty, head_name,
-          departments(id, code, name, department_heads(name, title))
+          departments!distribution_recipients_dept_id_fkey(
+            id, code, name, department_heads(name, title)
+          )
         )
       )
     `
     )
     .order("created_at", { ascending: false });
+
+  if (error) {
+    console.error("[getDistributions] code:", error.code);
+    console.error("[getDistributions] message:", error.message);
+    console.error("[getDistributions] hint:", error.hint);
+  }
 
   return (data ?? []).map((d: any) => ({
     id: d.id,
@@ -284,7 +292,7 @@ export async function getDistributions() {
     notes: d.notes,
     created_at: d.created_at,
     handed_by_dept: d.departments
-      ? { ...d.departments, heads: d.departments.department_heads }
+      ? { ...d.departments, heads: d.departments.department_heads ?? [] }
       : null,
     created_by_name: d.users?.name ?? "",
     items: (d.distribution_items ?? []).map((item: any) => ({
@@ -299,9 +307,9 @@ export async function getDistributions() {
       recipients: (item.distribution_recipients ?? []).map((r: any) => ({
         id: r.id,
         qty: r.qty,
-        head_name: r.head_name ?? null, // ← TAMBAHAN
+        head_name: r.head_name ?? null,
         dept: r.departments
-          ? { ...r.departments, heads: r.departments.department_heads }
+          ? { ...r.departments, heads: r.departments.department_heads ?? [] }
           : null,
       })),
     })),
@@ -417,4 +425,109 @@ export async function getAllDocumentsForImport() {
     type_name: d.document_types?.name ?? "",
     dept_code: d.departments?.code ?? "",
   }));
+}
+
+// Tambahkan fungsi-fungsi ini ke app/lib/data.ts
+
+// ============================================================
+// EXTERNAL DOCUMENTS
+// ============================================================
+export async function getExternalDocuments() {
+  const PAGE = 1000;
+  let allData: any[] = [];
+  let from = 0;
+
+  while (true) {
+    const { data } = await supabaseAdmin
+      .from("documents")
+      .select(
+        `id, doc_number, title, revision, effective_date, expiry_date,
+        status, created_at, updated_at, category_id, type_id,
+        document_types!inner(name),
+        categories!inner(name),
+        users(name),
+        document_eksternal(source, test_report_no),
+        document_eksternal_kal(no_order, item_type, brand, model, serial_no, calibration_date)`
+      )
+      .eq("category_id", "4f201927-3332-4123-904e-0705939f38d8")
+      .in("status", ["terbaru", "kadaluarsa"])
+      .order("doc_number")
+      .range(from, from + PAGE - 1);
+
+    if (!data || data.length === 0) break;
+    allData = [...allData, ...data];
+    if (data.length < PAGE) break;
+    from += PAGE;
+  }
+
+  return allData.map((d: any) => ({
+    id: d.id,
+    doc_number: d.doc_number,
+    title: d.title,
+    revision: d.revision,
+    effective_date: d.effective_date,
+    expiry_date: d.expiry_date,
+    status: d.status,
+    created_at: d.created_at,
+    updated_at: d.updated_at,
+    category_id: d.category_id,
+    type_id: d.type_id,
+    type_name: d.document_types?.name ?? "",
+    category_name: d.categories?.name ?? "",
+    uploaded_by_name: d.users?.name ?? "",
+    // document_eksternal fields
+    source: d.document_eksternal?.[0]?.source ?? null,
+    test_report_no: d.document_eksternal?.[0]?.test_report_no ?? null,
+    // document_eksternal_kal fields
+    no_order: d.document_eksternal_kal?.[0]?.no_order ?? null,
+    item_type: d.document_eksternal_kal?.[0]?.item_type ?? null,
+    brand: d.document_eksternal_kal?.[0]?.brand ?? null,
+    model: d.document_eksternal_kal?.[0]?.model ?? null,
+    serial_no: d.document_eksternal_kal?.[0]?.serial_no ?? null,
+    calibration_date: d.document_eksternal_kal?.[0]?.calibration_date ?? null,
+  }));
+}
+
+export async function getExternalDocumentById(id: string) {
+  const { data } = await supabaseAdmin
+    .from("documents")
+    .select(
+      `id, doc_number, title, revision, effective_date, expiry_date,
+      status, category_id, type_id, uploaded_by,
+      document_types!inner(name),
+      categories!inner(name),
+      document_eksternal(source, test_report_no),
+      document_eksternal_kal(no_order, item_type, brand, model, serial_no, calibration_date)`
+    )
+    .eq("id", id)
+    .single();
+
+  if (!data) return null;
+
+  return {
+    id: data.id,
+    doc_number: data.doc_number,
+    title: data.title,
+    revision: data.revision,
+    effective_date: data.effective_date,
+    expiry_date: data.expiry_date,
+    status: data.status,
+    category_id: data.category_id,
+    type_id: data.type_id,
+    uploaded_by: data.uploaded_by,
+    type_name: (data as any).document_types?.name ?? "",
+    category_name: (data as any).categories?.name ?? "",
+    // document_eksternal fields
+    source: (data as any).document_eksternal?.[0]?.source ?? null,
+    test_report_no:
+      (data as any).document_eksternal?.[0]?.test_report_no ?? null,
+    // document_eksternal_kal fields
+    no_order: (data as any).document_eksternal_kal?.[0]?.no_order ?? null,
+    item_type: (data as any).document_eksternal_kal?.[0]?.item_type ?? null,
+    brand: (data as any).document_eksternal_kal?.[0]?.brand ?? null,
+    model: (data as any).document_eksternal_kal?.[0]?.model ?? null,
+    serial_no: (data as any).document_eksternal_kal?.[0]?.serial_no ?? null,
+    calibration_date:
+      (data as any).document_eksternal_kal?.[0]?.calibration_date ?? null,
+  };
 }

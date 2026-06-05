@@ -4,6 +4,8 @@ import { supabaseAdmin } from "@/app/lib/supabase";
 import DocumentsClient from "@/app/ui/documents-client";
 import { Breadcrumb } from "@/app/ui/breadcrumb";
 
+const CATEGORY_ID = "6793507f-a782-4f6c-8964-647ae477f768";
+
 export default async function Page() {
   const session = await auth();
   const role = (session?.user as any)?.role ?? "viewer";
@@ -14,18 +16,19 @@ export default async function Page() {
     getDocumentTypes(),
   ]);
 
-  // Ambil semua kategori
-  const { data: categoriesData } = await supabaseAdmin
+  // Filter categories hanya untuk kategori ini
+  const { data: categoryData } = await supabaseAdmin
     .from("categories")
     .select("id, name")
-    .order("name");
+    .eq("id", CATEGORY_ID)
+    .single();
 
-  const categories = (categoriesData ?? []).map((c) => ({
-    id: c.id,
-    name: c.name,
-  }));
+  console.log("categoryData:", categoryData); // ← tambah di sini
 
-  // Ambil semua dokumen dari semua kategori
+  const categories = categoryData
+    ? [{ id: categoryData.id, name: categoryData.name }]
+    : [];
+
   const PAGE = 1000;
   let rawDocs: any[] = [];
   let from = 0;
@@ -42,6 +45,7 @@ export default async function Page() {
         departments(code, name),
         users(name)`
       )
+      .eq("category_id", CATEGORY_ID)
       .in("status", ["terbaru", "kadaluarsa"])
       .order("doc_number")
       .range(from, from + PAGE - 1);
@@ -52,7 +56,7 @@ export default async function Page() {
     from += PAGE;
   }
 
-  const documents = rawDocs.map((d: any) => ({
+  const documents = (rawDocs ?? []).map((d: any) => ({
     id: d.id,
     doc_number: d.doc_number,
     title: d.title,
@@ -77,12 +81,12 @@ export default async function Page() {
   return (
     <div className="max-w-8xl mx-auto py-2 px-4">
       <Breadcrumb
-        items={[{ label: "Dokumen", href: "#" }, { label: "Semua Dokumen" }]}
+        items={[{ label: "Kelola Dokumen", href: "#" }, { label: "MSDS" }]}
       />
       <div className="mb-6 mt-4">
-        <h1 className="text-2xl font-bold text-slate-800">Semua Dokumen</h1>
+        <h1 className="text-2xl font-bold text-slate-800">MSDS</h1>
         <p className="text-sm text-slate-400 mt-1">
-          Daftar seluruh dokumen perusahaan dari semua kategori
+          Kelola dokumen Material Safety Data Sheet
         </p>
       </div>
       <DocumentsClient
@@ -90,9 +94,9 @@ export default async function Page() {
         categories={categories}
         departments={departments}
         documentTypes={documentTypes}
-        role="viewer"
+        role={role}
         userId={userId}
-        basePath="/dashboard/documents"
+        basePath="/dashboard/msds"
       />
     </div>
   );
