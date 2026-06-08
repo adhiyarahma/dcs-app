@@ -1576,3 +1576,60 @@ export async function deleteExternalDocument(id: string) {
     return { error: "Gagal menghapus dokumen eksternal." };
   }
 }
+
+// ============================================================
+// MASTER CUSTOMERS
+// ============================================================
+export async function createCustomer(formData: FormData) {
+  const name = (formData.get("name") as string)?.trim();
+  const code = (formData.get("code") as string)?.trim() || null;
+
+  if (!name) return { error: "Nama perusahaan wajib diisi." };
+
+  try {
+    const { error } = await supabaseAdmin
+      .from("master_customers")
+      .insert({ name, code });
+    if (error) {
+      if (error.code === "23505") return { error: "Customer sudah ada." };
+      return { error: "Gagal membuat customer." };
+    }
+    revalidatePath("/dashboard/master/customer");
+    return { success: true };
+  } catch {
+    return { error: "Gagal membuat customer." };
+  }
+}
+
+export async function updateCustomer(id: string, formData: FormData) {
+  const name = (formData.get("name") as string)?.trim();
+  const code = (formData.get("code") as string)?.trim() || null;
+
+  if (!name) return { error: "Nama perusahaan wajib diisi." };
+
+  try {
+    const { error } = await supabaseAdmin
+      .from("master_customers")
+      .update({ name, code, updated_at: new Date().toISOString() })
+      .eq("id", id);
+    if (error) return { error: "Gagal mengupdate customer." };
+    revalidatePath("/dashboard/master/customer");
+    return { success: true };
+  } catch {
+    return { error: "Gagal mengupdate customer." };
+  }
+}
+
+export async function deleteCustomer(id: string) {
+  try {
+    const { error } = await supabaseAdmin
+      .from("master_customers")
+      .delete()
+      .eq("id", id);
+    if (error) return { error: "Gagal menghapus customer." };
+    revalidatePath("/dashboard/master/customer");
+    return { success: true };
+  } catch {
+    return { error: "Gagal menghapus customer." };
+  }
+}

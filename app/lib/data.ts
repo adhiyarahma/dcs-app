@@ -531,3 +531,14 @@ export async function getExternalDocumentById(id: string) {
       (data as any).document_eksternal_kal?.[0]?.calibration_date ?? null,
   };
 }
+
+// ============================================================
+// MASTER CUSTOMERS
+// ============================================================
+export async function getMasterCustomers() {
+  const { data } = await supabaseAdmin
+    .from("master_customers")
+    .select("id, code, name, created_at")
+    .order("name");
+  return data ?? [];
+}
