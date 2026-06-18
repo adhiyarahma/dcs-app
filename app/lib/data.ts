@@ -542,3 +542,23 @@ export async function getMasterCustomers() {
     .order("name");
   return data ?? [];
 }
+
+export async function getEmployees() {
+  const { data } = await supabaseAdmin
+    .from("master_employees")
+    .select(
+      `id, nik, name, join_date, created_at,
+       departments(code, name)`
+    )
+    .order("name");
+
+  return (data ?? []).map((e: any) => ({
+    id: e.id,
+    nik: e.nik,
+    name: e.name,
+    join_date: e.join_date ?? null,
+    created_at: e.created_at,
+    department_code: e.departments?.code ?? "",
+    department_name: e.departments?.name ?? "",
+  }));
+}

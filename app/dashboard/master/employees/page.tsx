@@ -1,38 +1,26 @@
-import { Breadcrumb } from "@/app/ui/breadcrumb";
+// app/dashboard/master/employees/page.tsx
+// Server Component — fetch data di server, pass ke client
 
-export default function Page() {
+import { getEmployees } from "@/app/lib/data";
+import { getDepartments } from "@/app/lib/data";
+import { Breadcrumb } from "@/app/ui/breadcrumb";
+import EmployeesClient from "@/app/ui/EmployeesClient";
+
+export default async function EmployeesPage() {
+  const [employees, departments] = await Promise.all([
+    getEmployees(),
+    getDepartments(),
+  ]);
+
   return (
     <div className="max-w-7xl mx-auto py-2 px-4">
       <Breadcrumb
         items={[{ label: "Master Data", href: "#" }, { label: "Karyawan" }]}
       />
-      <div className="mb-6 mt-4">
-        <h1 className="text-2xl font-bold text-slate-800">Master Karyawan</h1>
-        <p className="text-sm text-slate-400 mt-1">
-          Kelola data master karyawan
-        </p>
-      </div>
-      <div className="bg-white rounded-xl border border-slate-200 p-12 flex flex-col items-center justify-center text-center gap-3">
-        <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center">
-          <svg
-            className="w-6 h-6 text-slate-400"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={1.5}
-              d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"
-            />
-          </svg>
-        </div>
-        <p className="text-sm font-medium text-slate-600">
-          Halaman sedang dalam pengembangan
-        </p>
-        <p className="text-xs text-slate-400">Fitur ini akan segera tersedia</p>
-      </div>
+      <EmployeesClient
+        initialEmployees={employees as any}
+        departments={departments as any}
+      />
     </div>
   );
 }

@@ -4,7 +4,17 @@ import { supabaseAdmin } from "@/app/lib/supabase";
 import ExcelJS from "exceljs";
 
 // ─── Mapping jenis dokumen → template key ─────────────────────────────────────
-type TemplateKey = "msds_benang" | "msds_kimia" | "qesh";
+type TemplateKey =
+  | "msds_benang"
+  | "msds_kimia"
+  | "qesh"
+  | "ext_coa"
+  | "ext_diu"
+  | "ext_itp"
+  | "ext_kal"
+  | "ext_pip"
+  | "ext_spk"
+  | "ext_tes";
 
 const TYPE_NAME_TO_TEMPLATE: Record<string, TemplateKey> = {
   "MSDS Benang": "msds_benang",
@@ -17,9 +27,30 @@ const TYPE_NAME_TO_TEMPLATE: Record<string, TemplateKey> = {
   "Job Description": "qesh",
   "Job Qualification": "qesh",
   Pedoman: "qesh",
+  // ── Dokumen eksternal ──
+  COA: "ext_coa",
+  DIU: "ext_diu",
+  ITP: "ext_itp",
+  KAL: "ext_kal",
+  PIP: "ext_pip",
+  SPK: "ext_spk",
+  TES: "ext_tes",
 };
 
+// Set untuk deteksi cepat apakah sebuah TemplateKey termasuk grup eksternal
+const EXTERNAL_TEMPLATE_KEYS: TemplateKey[] = [
+  "ext_coa",
+  "ext_diu",
+  "ext_itp",
+  "ext_kal",
+  "ext_pip",
+  "ext_spk",
+  "ext_tes",
+];
+
 // ─── Checklist MSDS (kiri | kanan) ───────────────────────────────────────────
+// Catatan: checklist ini dipakai bersama untuk MSDS & Dokumen Eksternal,
+// karena sisi kanan sudah mencakup SPK, KAL, TES, ITP, COA, DIU, PIP.
 const MSDS_CHECKLIST: [string, string][] = [
   ["MSDS (LKB)", "Katalog Suku Cadang (KSC)"],
   ["Spesifikasi (SPK)", "Hasil Kalibrasi (KAL)"],
@@ -31,6 +62,18 @@ const MSDS_CHECKLIST: [string, string][] = [
   ["Dokumen Informasi Umum (DIU)", "……………………………….."],
   ["Petunjuk Instruksi Penggunaan (PIP)", ""],
 ];
+
+// Mapping kode jenis eksternal → label persis yang dipakai di MSDS_CHECKLIST,
+// supaya checklist bisa mencentang kotak yang benar sesuai docTypeName ("COA", "KAL", dst).
+const EXTERNAL_CHECKLIST_LABEL: Record<string, string> = {
+  COA: "Certificate Of Analysis (COA)",
+  DIU: "Dokumen Informasi Umum (DIU)",
+  ITP: "Informasi Teknik Produk (ITP)",
+  KAL: "Hasil Kalibrasi (KAL)",
+  PIP: "Petunjuk Instruksi Penggunaan (PIP)",
+  SPK: "Spesifikasi (SPK)",
+  TES: "Hasil Pengetesan Eksternal (TES)",
+};
 
 // ─── Checklist QESH (kiri | kanan) ───────────────────────────────────────────
 const QESH_CHECKLIST: [string, string][] = [
@@ -51,7 +94,7 @@ const QESH_DB_MAP: Record<string, string> = {
 };
 
 // ─── Kolom tabel per template ─────────────────────────────────────────────────
-// border hanya sampai kolom terakhir yang di-border (D untuk MSDS, E untuk QESH)
+// border hanya sampai kolom terakhir yang di-border
 // kolom setelah itu tetap ada tapi tanpa border (konsisten dengan export)
 
 interface ColDef {
@@ -297,6 +340,445 @@ const COLUMNS: Record<TemplateKey, ColDef[]> = {
       required: true,
     },
   ],
+
+  // ── Dokumen Eksternal: COA ── border A-D (sampai Keterangan), sisanya tanpa border
+  // Field: Judul Dokumen, No. Dokumen, Keterangan (wajib), Tanggal (wajib)
+  // Catatan: kolom Status DIHAPUS dari template — semua dokumen COA otomatis "terbaru"
+  ext_coa: [
+    {
+      label: "No.",
+      field: "no",
+      width: 4,
+      align: "center",
+      withBorder: true,
+      required: true,
+    },
+    {
+      label: "Judul Dokumen",
+      field: "title",
+      width: 43,
+      align: "left",
+      withBorder: true,
+      required: true,
+    },
+    {
+      label: "No. Dokumen",
+      field: "doc_number",
+      width: 20,
+      align: "center",
+      withBorder: true,
+      required: true,
+    },
+    {
+      label: "Keterangan",
+      field: "source",
+      width: 18,
+      align: "center",
+      withBorder: true,
+      required: true,
+    },
+    {
+      label: "Tanggal",
+      field: "effective_date",
+      width: 14,
+      align: "center",
+      withBorder: false,
+      required: true,
+    },
+    {
+      label: "Link File",
+      field: "link_file",
+      width: 14,
+      align: "center",
+      withBorder: false,
+      required: false,
+    },
+  ],
+
+  // ── Dokumen Eksternal: DIU ── border A-D (sampai Keterangan)
+  // Field: Judul Dokumen, No. Dokumen, Keterangan (wajib), Status
+  // Catatan: kolom Tanggal DIGANTI dengan Keterangan
+  ext_diu: [
+    {
+      label: "No.",
+      field: "no",
+      width: 4,
+      align: "center",
+      withBorder: true,
+      required: true,
+    },
+    {
+      label: "Judul Dokumen",
+      field: "title",
+      width: 43,
+      align: "left",
+      withBorder: true,
+      required: true,
+    },
+    {
+      label: "No. Dokumen",
+      field: "doc_number",
+      width: 20,
+      align: "center",
+      withBorder: true,
+      required: true,
+    },
+    {
+      label: "Keterangan",
+      field: "source",
+      width: 18,
+      align: "center",
+      withBorder: true,
+      required: true,
+    },
+    {
+      label: "Link File",
+      field: "link_file",
+      width: 14,
+      align: "center",
+      withBorder: false,
+      required: false,
+    },
+    {
+      label: "Status",
+      field: "status",
+      width: 12,
+      align: "center",
+      withBorder: false,
+      required: true,
+    },
+  ],
+
+  // ── Dokumen Eksternal: ITP ── border A-D (sampai Keterangan)
+  // Field: Judul Dokumen, No. Dokumen, Keterangan (wajib), Revisi (opsional), Tgl Efektif (opsional), Status
+  ext_itp: [
+    {
+      label: "No.",
+      field: "no",
+      width: 4,
+      align: "center",
+      withBorder: true,
+      required: true,
+    },
+    {
+      label: "Judul Dokumen",
+      field: "title",
+      width: 40,
+      align: "left",
+      withBorder: true,
+      required: true,
+    },
+    {
+      label: "No. Dokumen",
+      field: "doc_number",
+      width: 20,
+      align: "center",
+      withBorder: true,
+      required: true,
+    },
+    {
+      label: "Keterangan",
+      field: "source",
+      width: 18,
+      align: "center",
+      withBorder: true,
+      required: true,
+    },
+    {
+      label: "Revisi",
+      field: "revision",
+      width: 8,
+      align: "center",
+      withBorder: false,
+      required: false,
+    },
+    {
+      label: "Tgl Efektif",
+      field: "effective_date",
+      width: 14,
+      align: "center",
+      withBorder: false,
+      required: false,
+    },
+    {
+      label: "Link File",
+      field: "link_file",
+      width: 14,
+      align: "center",
+      withBorder: false,
+      required: false,
+    },
+    {
+      label: "Status",
+      field: "status",
+      width: 12,
+      align: "center",
+      withBorder: false,
+      required: true,
+    },
+  ],
+
+  // ── Dokumen Eksternal: KAL ── border A-D (sampai No. Order, unique key baru)
+  // Field: Judul Dokumen, No. Dokumen (OPSIONAL), No. Order (wajib, unique key),
+  //        Tgl Pengujian/Masa Berlaku (wajib, format fleksibel: DD/MM/YYYY, MM/YYYY, atau YYYY),
+  //        Jenis, Merek, Model, No. Seri, Tgl Kalibrasi (format fleksibel, opsional), Status
+  ext_kal: [
+    {
+      label: "No.",
+      field: "no",
+      width: 4,
+      align: "center",
+      withBorder: true,
+      required: true,
+    },
+    {
+      label: "Judul Dokumen",
+      field: "title",
+      width: 36,
+      align: "left",
+      withBorder: true,
+      required: true,
+    },
+    {
+      label: "No. Dokumen",
+      field: "doc_number",
+      width: 16,
+      align: "center",
+      withBorder: true,
+      required: false,
+    },
+    {
+      label: "No. Order",
+      field: "no_order",
+      width: 16,
+      align: "center",
+      withBorder: true,
+      required: true,
+    },
+    {
+      label: "Tgl Pengujian / Masa Berlaku",
+      field: "expiry_date",
+      width: 22,
+      align: "center",
+      withBorder: false,
+      required: true,
+    },
+    {
+      label: "Jenis",
+      field: "item_type",
+      width: 14,
+      align: "center",
+      withBorder: false,
+      required: false,
+    },
+    {
+      label: "Merek",
+      field: "brand",
+      width: 14,
+      align: "center",
+      withBorder: false,
+      required: false,
+    },
+    {
+      label: "Model",
+      field: "model",
+      width: 14,
+      align: "center",
+      withBorder: false,
+      required: false,
+    },
+    {
+      label: "No. Seri",
+      field: "serial_no",
+      width: 14,
+      align: "center",
+      withBorder: false,
+      required: false,
+    },
+    {
+      label: "Tgl Kalibrasi",
+      field: "calibration_date",
+      width: 18,
+      align: "center",
+      withBorder: false,
+      required: false,
+    },
+    {
+      label: "Link File",
+      field: "link_file",
+      width: 14,
+      align: "center",
+      withBorder: false,
+      required: false,
+    },
+    {
+      label: "Status",
+      field: "status",
+      width: 12,
+      align: "center",
+      withBorder: false,
+      required: true,
+    },
+  ],
+
+  // ── Dokumen Eksternal: PIP ── border A-C (paling minim, tidak ada kolom wajib lain)
+  // Field: Judul Dokumen, No. Dokumen, Status (paling minim)
+  ext_pip: [
+    {
+      label: "No.",
+      field: "no",
+      width: 4,
+      align: "center",
+      withBorder: true,
+      required: true,
+    },
+    {
+      label: "Judul Dokumen",
+      field: "title",
+      width: 46,
+      align: "left",
+      withBorder: true,
+      required: true,
+    },
+    {
+      label: "No. Dokumen",
+      field: "doc_number",
+      width: 22,
+      align: "center",
+      withBorder: true,
+      required: true,
+    },
+    {
+      label: "Link File",
+      field: "link_file",
+      width: 14,
+      align: "center",
+      withBorder: false,
+      required: false,
+    },
+    {
+      label: "Status",
+      field: "status",
+      width: 12,
+      align: "center",
+      withBorder: false,
+      required: true,
+    },
+  ],
+
+  // ── Dokumen Eksternal: SPK ── border A-C (sama seperti PIP)
+  // Field: Judul Dokumen, No. Dokumen, Status (sama seperti PIP)
+  ext_spk: [
+    {
+      label: "No.",
+      field: "no",
+      width: 4,
+      align: "center",
+      withBorder: true,
+      required: true,
+    },
+    {
+      label: "Judul Dokumen",
+      field: "title",
+      width: 46,
+      align: "left",
+      withBorder: true,
+      required: true,
+    },
+    {
+      label: "No. Dokumen",
+      field: "doc_number",
+      width: 22,
+      align: "center",
+      withBorder: true,
+      required: true,
+    },
+    {
+      label: "Link File",
+      field: "link_file",
+      width: 14,
+      align: "center",
+      withBorder: false,
+      required: false,
+    },
+    {
+      label: "Status",
+      field: "status",
+      width: 12,
+      align: "center",
+      withBorder: false,
+      required: true,
+    },
+  ],
+
+  // ── Dokumen Eksternal: TES ── border A-D (sampai Keterangan)
+  // Field: Judul Dokumen, No. Dokumen, Keterangan (wajib), Tanggal (wajib), Test Report No. (opsional), Status
+  ext_tes: [
+    {
+      label: "No.",
+      field: "no",
+      width: 4,
+      align: "center",
+      withBorder: true,
+      required: true,
+    },
+    {
+      label: "Judul Dokumen",
+      field: "title",
+      width: 38,
+      align: "left",
+      withBorder: true,
+      required: true,
+    },
+    {
+      label: "No. Dokumen",
+      field: "doc_number",
+      width: 18,
+      align: "center",
+      withBorder: true,
+      required: true,
+    },
+    {
+      label: "Keterangan",
+      field: "source",
+      width: 16,
+      align: "center",
+      withBorder: true,
+      required: true,
+    },
+    {
+      label: "Tanggal",
+      field: "effective_date",
+      width: 14,
+      align: "center",
+      withBorder: false,
+      required: true,
+    },
+    {
+      label: "Test Report No.",
+      field: "test_report_no",
+      width: 16,
+      align: "center",
+      withBorder: false,
+      required: false,
+    },
+    {
+      label: "Link File",
+      field: "link_file",
+      width: 14,
+      align: "center",
+      withBorder: false,
+      required: false,
+    },
+    {
+      label: "Status",
+      field: "status",
+      width: 12,
+      align: "center",
+      withBorder: false,
+      required: true,
+    },
+  ],
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -351,11 +833,14 @@ function applyOutsideBorder(
   }
 }
 
-// ─── Header MSDS (Perbaikan: Tambahkan pengecekan dinamis) ────────────────────
+// ─── Header MSDS & Dokumen Eksternal (sama-sama pakai MSDS_CHECKLIST) ─────────
+// `checkedLabel` adalah label tepat yang harus dicentang (dipakai untuk eksternal,
+// karena docTypeName-nya berupa kode singkat seperti "COA", "KAL", bukan label lengkap).
 function buildMsdsHeader(
   ws: ExcelJS.Worksheet,
   categoryName: string,
-  typeName: string
+  typeName: string,
+  checkedLabel?: string
 ) {
   ws.mergeCells(1, 1, 1, 4);
   setHeaderCell(ws, 1, 1, "PT. IDAMAN ERAMANDIRI", 12).alignment = {
@@ -370,12 +855,16 @@ function buildMsdsHeader(
   ws.getRow(2).height = 20.25;
   setHeaderCell(ws, 4, 1, "Kategori Dokumen:", 11);
 
+  // Label yang harus dicentang: untuk eksternal pakai checkedLabel (label lengkap dari
+  // EXTERNAL_CHECKLIST_LABEL), untuk MSDS biasa pakai typeName langsung.
+  const targetLabel = checkedLabel ?? typeName;
+
   const isMsds = categoryName.toLowerCase().includes("msds");
   // Ambil semua tipe yang sudah ada di checklist
   const knownMsdsTypes = MSDS_CHECKLIST.flat().filter(
     (item) => item && !item.includes("…")
   );
-  const isOtherType = !isMsds && !knownMsdsTypes.includes(typeName);
+  const isOtherType = !isMsds && !knownMsdsTypes.includes(targetLabel);
 
   MSDS_CHECKLIST.forEach(([left, right], i) => {
     const rowNum = 5 + i;
@@ -383,7 +872,7 @@ function buildMsdsHeader(
 
     // Cek sisi kiri
     const isCheckedLeft =
-      (left === "MSDS (LKB)" && isMsds) || left === typeName;
+      (left === "MSDS (LKB)" && isMsds) || left === targetLabel;
     setHeaderCell(
       ws,
       rowNum,
@@ -396,8 +885,8 @@ function buildMsdsHeader(
     // Cek sisi kanan
     if (right) {
       const isOther = right.includes("…") && isOtherType;
-      const displayText = isOther ? typeName : right;
-      const isCheckedRight = isOther ? true : right === typeName;
+      const displayText = isOther ? targetLabel : right;
+      const isCheckedRight = isOther ? true : right === targetLabel;
       setHeaderCell(
         ws,
         rowNum,
@@ -497,6 +986,18 @@ function buildTable(
     c.font = { name: "Arial", size: 10 };
     c.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
     if (col.withBorder) c.border = thinBorder;
+
+    // Kolom dengan format tanggal fleksibel (boleh DD/MM/YYYY, MM/YYYY, atau YYYY saja)
+    // diberi komentar Excel supaya user tahu format yang diterima.
+    if (col.field === "expiry_date" || col.field === "calibration_date") {
+      c.note = {
+        texts: [
+          {
+            text: "Format yang diterima:\nDD/MM/YYYY (contoh: 18/06/2026)\nMM/YYYY (contoh: 06/2026)\nYYYY (contoh: 2026)",
+          },
+        ],
+      } as any;
+    }
   });
   ws.getRow(headerRow).height = 20;
 
@@ -617,6 +1118,7 @@ export async function GET(request: NextRequest) {
 
   const template = TYPE_NAME_TO_TEMPLATE[docTypeName] ?? "qesh";
   const cols = COLUMNS[template];
+  const isExternal = EXTERNAL_TEMPLATE_KEYS.includes(template);
 
   // Kolom terakhir yang di-border
   const lastBorderColIdx = cols.reduce(
@@ -642,6 +1144,15 @@ export async function GET(request: NextRequest) {
     tableHeaderRow = 14; // header tabel mulai baris 14 (setelah header 1-13)
     footerRef = "FL-MRP-018, REV 01";
     freezeRow = 16; // freeze setelah 2 baris header tabel
+  } else if (isExternal) {
+    // Dokumen eksternal: pakai header gaya MSDS (checklist ■/□), tapi
+    // docTypeName-nya berupa kode singkat (COA, KAL, dst), jadi perlu
+    // map ke label lengkap supaya kotak yang tepat tercentang.
+    const checkedLabel = EXTERNAL_CHECKLIST_LABEL[docTypeName] ?? docTypeName;
+    buildMsdsHeader(ws, categoryName, docTypeName, checkedLabel);
+    tableHeaderRow = 14; // sama seperti layout MSDS
+    footerRef = "FL-MRP-018, REV 01"; // sesuaikan jika dokumen eksternal punya nomor form sendiri
+    freezeRow = 16;
   } else {
     buildQeshHeader(ws, docTypeName);
     tableHeaderRow = 12; // header tabel mulai baris 12 (setelah header 1-11)

@@ -42,7 +42,6 @@ const STATUS_MAP: Record<string, string> = {
   dihapus: "dihapus",
 };
 
-// ── Production type normalisasi (module-level agar bisa dipakai semua fungsi) ──
 const PRODUCTION_TYPE_NORMALIZE: Record<string, string> = {
   production: "production",
   Production: "production",
@@ -299,25 +298,21 @@ export async function createDepartment(formData: FormData) {
   const code = (formData.get("code") as string)?.trim().toUpperCase();
   const name = (formData.get("name") as string)?.trim();
 
-  // 1. Ambil semua keys dari formData
   const keys = Array.from(formData.keys());
-
-  // 2. Filter keys yang berawalan "head_name_" untuk mencari ada berapa kepala bagian
   const headIndices = keys
     .filter((k) => k.startsWith("head_name_"))
-    .map((k) => k.split("_")[2]); // Mengambil angka indeksnya (0, 1, dst)
+    .map((k) => k.split("_")[2]);
 
   const heads = headIndices
     .map((index) => ({
       name: formData.get(`head_name_${index}`) as string,
       title: formData.get(`head_title_${index}`) as string,
     }))
-    .filter((h) => h.name && h.title); // Pastikan tidak kosong
+    .filter((h) => h.name && h.title);
 
   if (!code || !name) return { error: "Kode dan Nama departemen wajib diisi." };
 
   try {
-    // 1. Insert ke departments
     const { data: deptData, error: deptError } = await supabaseAdmin
       .from("departments")
       .insert({ code, name })
@@ -329,7 +324,6 @@ export async function createDepartment(formData: FormData) {
       return { error: "Gagal membuat departemen." };
     }
 
-    // 3. Sekarang variabel 'heads' sudah berisi array objek yang benar
     if (heads.length > 0) {
       const headsToInsert = heads.map((h: any) => ({
         department_id: deptData.id,
@@ -359,14 +353,12 @@ export async function createDepartment(formData: FormData) {
 export async function updateDepartment(id: string, formData: FormData) {
   const code = (formData.get("code") as string)?.trim().toUpperCase();
   const name = (formData.get("name") as string)?.trim();
-  // Ubah key dari "heads" menjadi "heads_json" sesuai log Anda
   const headsRaw = formData.get("heads_json") as string;
   const heads = headsRaw ? JSON.parse(headsRaw) : [];
 
   if (!code || !name) return { error: "Kode dan Nama departemen wajib diisi." };
 
   try {
-    // 1. Update tabel departments
     const { error: deptError } = await supabaseAdmin
       .from("departments")
       .update({ code, name })
@@ -374,7 +366,6 @@ export async function updateDepartment(id: string, formData: FormData) {
 
     if (deptError) throw new Error("Gagal update tabel utama.");
 
-    // 2. Refresh heads: Hapus semua
     const { error: deleteError } = await supabaseAdmin
       .from("department_heads")
       .delete()
@@ -382,7 +373,6 @@ export async function updateDepartment(id: string, formData: FormData) {
 
     if (deleteError) throw new Error("Gagal menghapus data kepala lama.");
 
-    // 3. Insert yang baru
     if (heads.length > 0) {
       const headsToInsert = heads.map((h: any) => ({
         department_id: id,
@@ -800,7 +790,7 @@ export type ImportPreviewRow = {
   title: string;
   doc_number: string;
   revision: number;
-  effective_date?: string; // ← opsional
+  effective_date?: string;
   status: string;
   department_id?: string;
   revision_date?: string;
@@ -816,7 +806,7 @@ export type ParseExcelResult =
   | { success: false; error: string };
 
 // ============================================================
-// HELPER: parse tanggal dari Excel (serial number atau string)
+// HELPER: parse tanggal dari Excel
 // ============================================================
 function parseDate(value: unknown): string | null {
   if (!value) return null;
@@ -856,7 +846,6 @@ export async function parseImportData(
     const isMsdsKimia = extraKey === "msds_kimia";
     const isMsdsBenang = extraKey === "msds_benang";
 
-    // Lookup departemen: "CODE - Nama" → id
     const { data: departments } = await supabaseAdmin
       .from("departments")
       .select("id, code, name");
@@ -869,7 +858,6 @@ export async function parseImportData(
       }
     );
 
-    // Ambil doc_number dari excel untuk validasi duplikat ke DB
     const excelDocNumbers = rows
       .map((r) => String(r["No. Dokumen"] ?? "").trim())
       .filter(Boolean);
@@ -895,10 +883,8 @@ export async function parseImportData(
       const titleRaw = String(raw["Judul Dokumen"] ?? "").trim();
       const docNumRaw = String(raw["No. Dokumen"] ?? "").trim();
 
-      // Skip baris kosong
       if (!titleRaw && !docNumRaw) return;
 
-      // ── Judul Dokumen ──
       const title = titleRaw;
       if (!title)
         rowErrors.push({
@@ -907,7 +893,6 @@ export async function parseImportData(
           message: "Wajib diisi",
         });
 
-      // ── No. Dokumen ──
       const doc_number = docNumRaw;
       if (!doc_number)
         rowErrors.push({
@@ -916,13 +901,11 @@ export async function parseImportData(
           message: "Wajib diisi",
         });
 
-      // ── Keterangan → Revision (MSDS) atau Department (QESH) ──
       const keteranganRaw = raw["Keterangan"];
       let revision: number = 0;
       let department_id: string | undefined;
 
       if (isMsds) {
-        // Format "Rev. X" atau angka langsung
         const ket = String(keteranganRaw ?? "").trim();
         const revMatch = ket.match(/^[Rr]ev\.?\s*(\d+)$/);
         if (revMatch) {
@@ -940,7 +923,6 @@ export async function parseImportData(
           }
         }
       } else {
-        // QESH: Keterangan = "CODE - Nama Departemen"
         const deptRaw = String(keteranganRaw ?? "").trim();
         if (!deptRaw) {
           rowErrors.push({
@@ -957,21 +939,15 @@ export async function parseImportData(
               message: `Departemen "${deptRaw}" tidak ditemukan`,
             });
         }
-        // ── TAMBAHAN: baca revisi dari kolom "Revisi" ──
         const revisiRaw = String(raw["Rev"] ?? "").trim();
         if (revisiRaw !== "") {
-          // Bisa format "Rev.1", "Rev 1", "1", "01"
           const revMatch = revisiRaw.match(/(\d+)/);
           revision = revMatch ? parseInt(revMatch[1]) : 0;
         }
-        // Jika kosong, tetap 0 (revisi pertama)
       }
 
-      // ── Tgl Efektif — OPSIONAL ──
       const effective_date = parseDate(raw["Tgl Efektif"]) ?? undefined;
-      // tidak ada error jika kosong
 
-      // ── Status ──
       const statusRaw = String(raw["Status"] ?? "")
         .trim()
         .toLowerCase();
@@ -983,7 +959,6 @@ export async function parseImportData(
           message: "Pilih: Terbaru, Kadaluarsa, atau Dihapus",
         });
 
-      // ── Validasi duplikat (tanpa syarat effective_date wajib ada) ──
       if (title && doc_number && !isNaN(revision) && status) {
         const isExistInDb = existingDocs.some(
           (doc) =>
@@ -1015,21 +990,16 @@ export async function parseImportData(
         }
       }
 
-      // ── Tgl Revisi (MSDS Kimia) — OPSIONAL ──
       let revision_date: string | undefined;
       if (isMsdsKimia) {
         revision_date = parseDate(raw["Tgl Revisi"]) ?? undefined;
-        // tidak ada error jika kosong
       }
 
-      // ── Masa Berlaku (MSDS Benang & Kimia) — OPSIONAL ──
       let expiry_date: string | undefined;
       if (isMsdsBenang || isMsdsKimia) {
         expiry_date = parseDate(raw["Masa Berlaku"]) ?? undefined;
-        // tidak ada error jika kosong
       }
 
-      // ── Production Type (MSDS Kimia) — tetap wajib ──
       let production_type: string | undefined;
       if (isMsdsKimia) {
         const pt = String(raw["Production Type"] ?? "").trim();
@@ -1088,7 +1058,7 @@ export async function importDocuments(
       type_id: r.type_id,
       department_id: r.department_id ?? null,
       revision: r.revision,
-      effective_date: r.effective_date ?? null, // ← opsional, kirim null jika kosong
+      effective_date: r.effective_date ?? null,
       revision_date: r.revision_date ?? null,
       expiry_date: r.expiry_date ?? null,
       production_type: r.production_type ?? null,
@@ -1131,21 +1101,18 @@ export async function getTemplateColumns(docTypeName: string) {
 // ============================================================
 // DISTRIBUTIONS
 // ============================================================
-
-// Tipe input per dokumen: document_id + daftar penerima dengan qty masing-masing
 export type DistributionRecipientInput = {
   dept_id: string;
-  head_name?: string | null; // ← TAMBAH INI
+  head_name?: string | null;
   qty: number;
 };
 
 export type DistributionItemInput = {
   document_id: string;
-  distributed_date?: string | null; // null = pakai tanggal form (distributed_date header)
+  distributed_date?: string | null;
   recipients: DistributionRecipientInput[];
 };
 
-// ─── CREATE ───────────────────────────────────────────────────────────────────
 export async function createDistribution(
   formNumber: string,
   distributedDate: string,
@@ -1154,7 +1121,6 @@ export async function createDistribution(
   createdBy: string,
   notes: string
 ) {
-  // 1. Cek nomor form sudah digunakan
   const { count } = await supabaseAdmin
     .from("distributions")
     .select("*", { count: "exact", head: true })
@@ -1164,7 +1130,6 @@ export async function createDistribution(
     return { error: "Nomor form sudah digunakan." };
   }
 
-  // 2. Insert distribution header
   const { data: dist, error: distErr } = await supabaseAdmin
     .from("distributions")
     .insert({
@@ -1181,9 +1146,7 @@ export async function createDistribution(
     return { error: distErr?.message ?? "Gagal membuat distribusi." };
   }
 
-  // 3. Insert setiap item + recipients-nya
   for (const item of items) {
-    // Insert distribution_item (dengan tanggal override jika ada)
     const { data: distItem, error: itemErr } = await supabaseAdmin
       .from("distribution_items")
       .insert({
@@ -1198,7 +1161,6 @@ export async function createDistribution(
       return { error: itemErr?.message ?? "Gagal menyimpan item dokumen." };
     }
 
-    // Insert recipients untuk item ini
     if (item.recipients.length > 0) {
       const { error: recipErr } = await supabaseAdmin
         .from("distribution_recipients")
@@ -1206,7 +1168,7 @@ export async function createDistribution(
           item.recipients.map((r) => ({
             distribution_item_id: distItem.id,
             dept_id: r.dept_id,
-            head_name: r.head_name ?? null, // ← TAMBAH INI
+            head_name: r.head_name ?? null,
             qty: r.qty,
           }))
         );
@@ -1221,7 +1183,6 @@ export async function createDistribution(
   return { success: true };
 }
 
-// ─── UPDATE ───────────────────────────────────────────────────────────────────
 export async function updateDistribution(
   id: string,
   formNumber: string,
@@ -1230,7 +1191,6 @@ export async function updateDistribution(
   items: DistributionItemInput[],
   notes: string
 ) {
-  // 1. Cek nomor form tidak dipakai distribusi lain
   const { data: existing } = await supabaseAdmin
     .from("distributions")
     .select("id")
@@ -1242,7 +1202,6 @@ export async function updateDistribution(
     return { error: "Nomor form sudah digunakan oleh distribusi lain." };
   }
 
-  // 2. Update header
   const { error: updateErr } = await supabaseAdmin
     .from("distributions")
     .update({
@@ -1257,7 +1216,6 @@ export async function updateDistribution(
     return { error: updateErr.message ?? "Gagal mengupdate distribusi." };
   }
 
-  // 3. Hapus semua items lama (cascade akan hapus recipients juga)
   const { error: deleteErr } = await supabaseAdmin
     .from("distribution_items")
     .delete()
@@ -1267,7 +1225,6 @@ export async function updateDistribution(
     return { error: deleteErr.message ?? "Gagal menghapus item lama." };
   }
 
-  // 4. Insert items + recipients baru
   for (const item of items) {
     const { data: distItem, error: itemErr } = await supabaseAdmin
       .from("distribution_items")
@@ -1290,7 +1247,7 @@ export async function updateDistribution(
           item.recipients.map((r) => ({
             distribution_item_id: distItem.id,
             dept_id: r.dept_id,
-            head_name: r.head_name ?? null, // ← TAMBAH INI
+            head_name: r.head_name ?? null,
             qty: r.qty,
           }))
         );
@@ -1305,9 +1262,7 @@ export async function updateDistribution(
   return { success: true };
 }
 
-// ─── DELETE ───────────────────────────────────────────────────────────────────
 export async function deleteDistribution(id: string) {
-  // distribution_items + distribution_recipients terhapus otomatis via CASCADE
   const { error } = await supabaseAdmin
     .from("distributions")
     .delete()
@@ -1319,7 +1274,6 @@ export async function deleteDistribution(id: string) {
   return { success: true };
 }
 
-// ─── FETCH NEXT FORM NUMBER ───────────────────────────────────────────────────
 export async function fetchNextFormNumber(): Promise<string> {
   const now = new Date();
   const mm = String(now.getMonth() + 1).padStart(2, "0");
@@ -1343,8 +1297,12 @@ export async function fetchNextFormNumber(): Promise<string> {
   return `${nextNum}/DCC/${mm}/${yy}`;
 }
 
+// ============================================================
+// REVALIDATE HELPER
+// ============================================================
 const REVALIDATE_PATHS = [
   "/dashboard/dokumen-eksternal",
+  "/dashboard/dokumen-eksternal/[id]",
   "/dashboard/documents",
 ];
 
@@ -1361,11 +1319,10 @@ export async function createExternalDocument(formData: FormData) {
   const category_id = formData.get("category_id") as string;
   const type_id = formData.get("type_id") as string;
   const uploaded_by = formData.get("uploaded_by") as string;
-  const type_name = (formData.get("type_name") as string)?.trim();
+  const type_name = (formData.get("type_name") as string)?.trim().toLowerCase();
 
-  // Field dari tabel documents (sesuai jenis)
-  const effective_date = (formData.get("effective_date") as string) || null; // tanggal untuk COA/DIU/TES
-  const expiry_date = (formData.get("expiry_date") as string) || null; // masa berlaku KAL
+  const effective_date = (formData.get("effective_date") as string) || null;
+  const expiry_date = (formData.get("expiry_date") as string) || null;
   const revision_raw = formData.get("revision") as string;
   const revision = revision_raw ? parseInt(revision_raw) : 0;
   const status = (formData.get("status") as string) || "terbaru";
@@ -1398,33 +1355,31 @@ export async function createExternalDocument(formData: FormData) {
     }
 
     const document_id = doc.id;
-    const isKal = type_name?.toLowerCase() === "kal";
+    const isKal = type_name === "kal";
 
-    // 2. Insert ke document_eksternal (untuk semua jenis kecuali KAL murni)
-    const source = (formData.get("source") as string)?.trim() || null;
-    const test_report_no =
-      (formData.get("test_report_no") as string)?.trim() || null;
+    // 2. Insert ke document_external (semua jenis kecuali KAL)
+    const needsExternal = ["coa", "diu", "itp", "pip", "spk", "tes"].includes(
+      type_name ?? ""
+    );
 
-    if (source !== null || test_report_no !== null) {
+    if (needsExternal) {
+      const source = (formData.get("source") as string)?.trim() || null;
+      const test_report_no =
+        (formData.get("test_report_no") as string)?.trim() || null;
+
       const { error: extError } = await supabaseAdmin
-        .from("document_external")
-        .insert({
-          document_id, // Pastikan tipe data ID dari step 1 pas dengan kolom ini
-          source,
-          test_report_no,
-        });
+        .from("document_external") // ✅ nama tabel yang benar
+        .insert({ document_id, source, test_report_no });
 
       if (extError) {
-        // TAMPILKAN DI CONSOLE SERVER AGAR ANDA TAHU ALASANNYA
-        console.error("❌ ERROR DOCUMENT_EKSTERNAL:", extError);
-
+        console.error("❌ ERROR DOCUMENT_EXTERNAL:", extError);
         return {
           error: `Gagal menyimpan data eksternal. (Kode: ${extError.code} - ${extError.message})`,
         };
       }
     }
 
-    // 3. Insert ke document_eksternal_kal (khusus KAL)
+    // 3. Insert ke document_external_kal (khusus KAL)
     if (isKal) {
       const no_order = (formData.get("no_order") as string)?.trim() || null;
       const item_type = (formData.get("item_type") as string)?.trim() || null;
@@ -1435,7 +1390,7 @@ export async function createExternalDocument(formData: FormData) {
         (formData.get("calibration_date") as string) || null;
 
       const { error: kalError } = await supabaseAdmin
-        .from("document_eksternal_kal")
+        .from("document_external_kal") // ✅ nama tabel yang benar
         .insert({
           document_id,
           no_order,
@@ -1462,9 +1417,8 @@ export async function createExternalDocument(formData: FormData) {
 // ============================================================
 export async function updateExternalDocument(id: string, formData: FormData) {
   const title = (formData.get("title") as string)?.trim();
-  const doc_number = (formData.get("doc_number") as string)?.trim();
   const type_id = formData.get("type_id") as string;
-  const type_name = (formData.get("type_name") as string)?.trim();
+  const type_name = (formData.get("type_name") as string)?.trim().toLowerCase();
   const effective_date = (formData.get("effective_date") as string) || null;
   const expiry_date = (formData.get("expiry_date") as string) || null;
   const revision_raw = formData.get("revision") as string;
@@ -1473,15 +1427,14 @@ export async function updateExternalDocument(id: string, formData: FormData) {
 
   if (!title || !type_id) return { error: "Field wajib belum lengkap." };
 
-  const isKal = type_name?.toLowerCase() === "kal";
+  const isKal = type_name === "kal";
 
   try {
-    // 1. Update tabel documents
+    // 1. Update tabel documents (doc_number tidak diupdate)
     const { error: docError } = await supabaseAdmin
       .from("documents")
       .update({
         title,
-        doc_number,
         type_id,
         revision,
         effective_date,
@@ -1493,14 +1446,14 @@ export async function updateExternalDocument(id: string, formData: FormData) {
 
     if (docError) return { error: "Gagal mengupdate dokumen." };
 
-    // 2. Upsert document_eksternal
-    const source = (formData.get("source") as string)?.trim() || null;
-    const test_report_no =
-      (formData.get("test_report_no") as string)?.trim() || null;
-
+    // 2. Upsert document_external (semua jenis kecuali KAL)
     if (!isKal) {
+      const source = (formData.get("source") as string)?.trim() || null;
+      const test_report_no =
+        (formData.get("test_report_no") as string)?.trim() || null;
+
       const { error: extError } = await supabaseAdmin
-        .from("document_eksternal")
+        .from("document_external") // ✅ nama tabel yang benar
         .upsert(
           { document_id: id, source, test_report_no },
           { onConflict: "document_id" }
@@ -1510,7 +1463,7 @@ export async function updateExternalDocument(id: string, formData: FormData) {
         return { error: "Dokumen terupdate tapi gagal update data eksternal." };
     }
 
-    // 3. Upsert document_eksternal_kal
+    // 3. Upsert document_external_kal
     if (isKal) {
       const no_order = (formData.get("no_order") as string)?.trim() || null;
       const item_type = (formData.get("item_type") as string)?.trim() || null;
@@ -1521,7 +1474,7 @@ export async function updateExternalDocument(id: string, formData: FormData) {
         (formData.get("calibration_date") as string) || null;
 
       const { error: kalError } = await supabaseAdmin
-        .from("document_eksternal_kal")
+        .from("document_external_kal") // ✅ nama tabel yang benar
         .upsert(
           {
             document_id: id,
@@ -1551,15 +1504,14 @@ export async function updateExternalDocument(id: string, formData: FormData) {
 // ============================================================
 export async function deleteExternalDocument(id: string) {
   try {
-    // document_eksternal dan document_eksternal_kal akan terhapus via CASCADE
-    // kalau belum ada CASCADE, hapus manual dulu
+    // Hapus data relasi dulu sebelum hapus dokumen utama
     await supabaseAdmin
-      .from("document_eksternal")
+      .from("document_external") // ✅ nama tabel yang benar
       .delete()
       .eq("document_id", id);
 
     await supabaseAdmin
-      .from("document_eksternal_kal")
+      .from("document_external_kal") // ✅ nama tabel yang benar
       .delete()
       .eq("document_id", id);
 
@@ -1631,5 +1583,617 @@ export async function deleteCustomer(id: string) {
     return { success: true };
   } catch {
     return { error: "Gagal menghapus customer." };
+  }
+}
+
+// ============================================================
+// HELPER: parse tanggal fleksibel dari Excel
+// Mendukung format: DD/MM/YYYY, MM/YYYY, atau YYYY saja.
+// Jika bagian tanggal/bulan tidak diisi, di-padding ke 01.
+// Contoh:
+//   "18/06/2026" -> "2026-06-18"
+//   "06/2026"    -> "2026-06-01"
+//   "2026"       -> "2026-01-01"
+//   2026 (number)-> "2026-01-01"  (Excel kadang baca tahun sebagai number)
+// ============================================================
+function parseDateFlexible(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+
+  // Excel serial date number (tanggal lengkap dari date picker)
+  if (typeof value === "number") {
+    // Heuristik: serial date Excel biasanya > 10000 (tahun 1927+).
+    // Kalau angkanya kecil (misal 2026), anggap itu input tahun polos, bukan serial date.
+    if (value > 10000) {
+      const date = new Date((value - 25569) * 86400 * 1000);
+      return date.toISOString().split("T")[0];
+    }
+    const y = Math.trunc(value);
+    if (y >= 1900 && y <= 2200) {
+      return `${y}-01-01`;
+    }
+    return null;
+  }
+
+  if (typeof value !== "string") return null;
+  const s = value.trim();
+  if (!s) return null;
+
+  // Format lengkap DD/MM/YYYY
+  const dmyMatch = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (dmyMatch) {
+    const [, d, m, y] = dmyMatch;
+    return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+  }
+
+  // Format ISO YYYY-MM-DD (sudah lengkap)
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+
+  // Format MM/YYYY -> padding tanggal ke 01
+  const myMatch = s.match(/^(\d{1,2})\/(\d{4})$/);
+  if (myMatch) {
+    const [, m, y] = myMatch;
+    return `${y}-${m.padStart(2, "0")}-01`;
+  }
+
+  // Format YYYY saja -> padding bulan & tanggal ke 01-01
+  const yMatch = s.match(/^(\d{4})$/);
+  if (yMatch) {
+    const [, y] = yMatch;
+    return `${y}-01-01`;
+  }
+
+  return null;
+}
+
+// ============================================================
+// IMPORT EXTERNAL DOCUMENTS — TYPES (tidak berubah dari sebelumnya,
+// kecuali doc_number sekarang opsional secara semantik untuk KAL)
+// ============================================================
+
+export type ExternalImportRow = {
+  // Kolom universal
+  doc_number: string; // boleh kosong khusus untuk KAL
+  title: string;
+  status: string;
+  source: string | null; // dari kolom "Keterangan"
+  // Per jenis
+  effective_date?: string; // COA, DIU(dihapus), TES, ITP
+  revision?: number; // ITP
+  test_report_no?: string; // TES
+  expiry_date?: string; // KAL
+  no_order?: string; // KAL — sekarang jadi unique key untuk KAL
+  item_type?: string; // KAL
+  brand?: string; // KAL
+  model?: string; // KAL
+  serial_no?: string; // KAL
+  calibration_date?: string; // KAL
+  // Metadata (diisi server)
+  type_id: string;
+  category_id: string;
+  uploaded_by: string;
+  type_name: string;
+};
+
+export type ExternalImportRowError = {
+  row: number;
+  field: string;
+  message: string;
+};
+
+export type ParseExternalResult =
+  | {
+      success: true;
+      rows: ExternalImportRow[];
+      errors: ExternalImportRowError[];
+    }
+  | { success: false; error: string };
+
+// Kolom wajib per jenis
+// Perubahan:
+//   - COA: "Status" dihapus dari kolom wajib (kolom Status tidak ada di template COA)
+//   - DIU: "Tanggal" diganti "Keterangan"
+//   - KAL: "No. Dokumen" dihapus dari wajib (jadi opsional)
+const EXT_REQUIRED: Record<string, string[]> = {
+  coa: ["Judul Dokumen", "No. Dokumen", "Keterangan", "Tanggal"],
+  diu: ["Judul Dokumen", "No. Dokumen", "Keterangan", "Status"],
+  itp: ["Judul Dokumen", "No. Dokumen", "Keterangan", "Status"],
+  kal: ["Judul Dokumen", "No. Order", "Tgl Pengujian / Masa Berlaku", "Status"],
+  pip: ["Judul Dokumen", "No. Dokumen", "Status"],
+  spk: ["Judul Dokumen", "No. Dokumen", "Status"],
+  tes: ["Judul Dokumen", "No. Dokumen", "Keterangan", "Tanggal", "Status"],
+};
+
+export async function parseExternalImportData(
+  rows: Record<string, unknown>[],
+  typeName: string,
+  typeId: string,
+  categoryId: string,
+  uploadedBy: string
+): Promise<ParseExternalResult> {
+  try {
+    const t = typeName.toLowerCase();
+    const requiredCols = EXT_REQUIRED[t] ?? [
+      "Judul Dokumen",
+      "No. Dokumen",
+      "Status",
+    ];
+    const isKal = t === "kal";
+    const isCoa = t === "coa";
+
+    // ── Ambil data existing dari DB untuk cek duplikat ──
+    // Untuk KAL, kita cek duplikat berdasarkan No. Order (unique key baru).
+    // Untuk jenis lain, tetap berdasarkan No. Dokumen seperti sebelumnya.
+    const excelDocNumbers = rows
+      .map((r) => String(r["No. Dokumen"] ?? "").trim())
+      .filter(Boolean);
+
+    let existingDocs: any[] = [];
+    if (!isKal && excelDocNumbers.length > 0) {
+      const { data } = await supabaseAdmin
+        .from("documents")
+        .select("doc_number, title, status")
+        .in("doc_number", excelDocNumbers);
+      existingDocs = data ?? [];
+    }
+
+    let existingKalOrders: any[] = [];
+    if (isKal) {
+      const excelOrderNumbers = rows
+        .map((r) => String(r["No. Order"] ?? "").trim())
+        .filter(Boolean);
+      if (excelOrderNumbers.length > 0) {
+        const { data } = await supabaseAdmin
+          .from("document_external_kal")
+          .select("no_order, document_id")
+          .in("no_order", excelOrderNumbers);
+        existingKalOrders = data ?? [];
+      }
+    }
+
+    const validRows: ExternalImportRow[] = [];
+    const errors: ExternalImportRowError[] = [];
+    const excelDuplicateTracker = new Set<string>();
+    const START_ROW = 16; // sama seperti MSDS (header 14 baris + 2 baris header tabel)
+
+    rows.forEach((raw, index) => {
+      const rowNum = index + START_ROW;
+      const rowErrors: ExternalImportRowError[] = [];
+
+      const titleRaw = String(raw["Judul Dokumen"] ?? "").trim();
+      const docNumRaw = String(raw["No. Dokumen"] ?? "").trim();
+      const noOrderRaw = String(raw["No. Order"] ?? "").trim();
+
+      // Skip baris kosong.
+      // Untuk KAL, baris dianggap kosong kalau Judul & No. Order kosong
+      // (karena No. Dokumen sudah opsional untuk KAL).
+      if (isKal) {
+        if (!titleRaw && !noOrderRaw) return;
+      } else {
+        if (!titleRaw && !docNumRaw) return;
+      }
+
+      // ── Judul Dokumen (selalu wajib) ──
+      if (!titleRaw)
+        rowErrors.push({
+          row: rowNum,
+          field: "Judul Dokumen",
+          message: "Wajib diisi",
+        });
+
+      // ── No. Dokumen ──
+      // Wajib untuk semua jenis KECUALI KAL (opsional di KAL).
+      if (!isKal && !docNumRaw)
+        rowErrors.push({
+          row: rowNum,
+          field: "No. Dokumen",
+          message: "Wajib diisi",
+        });
+
+      // ── No. Order (khusus KAL, wajib & jadi unique key) ──
+      if (isKal && !noOrderRaw)
+        rowErrors.push({
+          row: rowNum,
+          field: "No. Order",
+          message: "Wajib diisi",
+        });
+
+      // ── Keterangan → source ──
+      const source = String(raw["Keterangan"] ?? "").trim() || null;
+      if (requiredCols.includes("Keterangan") && !source)
+        rowErrors.push({
+          row: rowNum,
+          field: "Keterangan",
+          message: "Wajib diisi",
+        });
+
+      // ── Status ──
+      // COA tidak punya kolom Status di template -> otomatis "terbaru".
+      let status: string | undefined;
+      if (isCoa) {
+        status = "terbaru";
+      } else {
+        const statusRaw = String(raw["Status"] ?? "")
+          .trim()
+          .toLowerCase();
+        status = STATUS_MAP[statusRaw];
+        if (!status)
+          rowErrors.push({
+            row: rowNum,
+            field: "Status",
+            message: "Pilih: Terbaru, Kadaluarsa, atau Dihapus",
+          });
+      }
+
+      // ── Tanggal (COA, TES) ──
+      // Catatan: DIU sudah tidak punya kolom Tanggal, diganti Keterangan.
+      let effective_date: string | undefined;
+      if (raw["Tanggal"] !== undefined) {
+        effective_date = parseDate(raw["Tanggal"]) ?? undefined;
+        if (requiredCols.includes("Tanggal") && !effective_date)
+          rowErrors.push({
+            row: rowNum,
+            field: "Tanggal",
+            message: "Wajib diisi (format: DD/MM/YYYY)",
+          });
+      }
+
+      // ── Tgl Efektif (ITP) opsional ──
+      let itp_effective_date: string | undefined;
+      if (raw["Tgl Efektif"] !== undefined) {
+        itp_effective_date = parseDate(raw["Tgl Efektif"]) ?? undefined;
+      }
+
+      // ── Revisi (ITP) opsional ──
+      let revision: number | undefined;
+      if (raw["Revisi"] !== undefined) {
+        const revRaw = String(raw["Revisi"] ?? "").trim();
+        if (revRaw !== "") {
+          const num = parseInt(revRaw.replace(/\D/g, ""), 10);
+          revision = isNaN(num) ? 0 : num;
+        }
+      }
+
+      // ── Test Report No (TES) opsional ──
+      const test_report_no =
+        raw["Test Report No."] !== undefined
+          ? String(raw["Test Report No."] ?? "").trim() || undefined
+          : undefined;
+
+      // ── KAL fields ──
+      // Tgl Pengujian/Masa Berlaku dan Tgl Kalibrasi sekarang pakai
+      // parseDateFlexible: boleh DD/MM/YYYY, MM/YYYY, atau YYYY saja.
+      let expiry_date: string | undefined;
+      let no_order: string | undefined;
+      let item_type: string | undefined;
+      let brand: string | undefined;
+      let model: string | undefined;
+      let serial_no: string | undefined;
+      let calibration_date: string | undefined;
+
+      if (isKal) {
+        expiry_date =
+          parseDateFlexible(raw["Tgl Pengujian / Masa Berlaku"]) ?? undefined;
+        if (!expiry_date)
+          rowErrors.push({
+            row: rowNum,
+            field: "Tgl Pengujian / Masa Berlaku",
+            message: "Wajib diisi (format: DD/MM/YYYY, MM/YYYY, atau YYYY)",
+          });
+
+        no_order = noOrderRaw || undefined;
+        item_type = String(raw["Jenis"] ?? "").trim() || undefined;
+        brand = String(raw["Merek"] ?? "").trim() || undefined;
+        model = String(raw["Model"] ?? "").trim() || undefined;
+        serial_no = String(raw["No. Seri"] ?? "").trim() || undefined;
+        calibration_date = parseDateFlexible(raw["Tgl Kalibrasi"]) ?? undefined;
+      }
+
+      // ── Cek duplikat ──
+      if (isKal) {
+        // Untuk KAL, duplikat dicek berdasarkan No. Order (unique key).
+        if (noOrderRaw) {
+          const isExistInDb = existingKalOrders.some(
+            (k) => String(k.no_order).toLowerCase() === noOrderRaw.toLowerCase()
+          );
+          const uniqueKey = noOrderRaw.toLowerCase();
+
+          if (isExistInDb) {
+            rowErrors.push({
+              row: rowNum,
+              field: "Data Duplikat",
+              message: `No. Order "${noOrderRaw}" sudah ada di database`,
+            });
+          } else if (excelDuplicateTracker.has(uniqueKey)) {
+            rowErrors.push({
+              row: rowNum,
+              field: "Data Duplikat",
+              message:
+                "Duplikat dengan baris lain di file ini (No. Order sama)",
+            });
+          } else {
+            excelDuplicateTracker.add(uniqueKey);
+          }
+        }
+      } else if (titleRaw && docNumRaw && status) {
+        const isExistInDb = existingDocs.some(
+          (doc) =>
+            doc.doc_number.toLowerCase() === docNumRaw.toLowerCase() &&
+            doc.title.toLowerCase() === titleRaw.toLowerCase() &&
+            doc.status === status
+        );
+        const uniqueKey = `${docNumRaw}|${titleRaw}|${status}`.toLowerCase();
+
+        if (isExistInDb) {
+          rowErrors.push({
+            row: rowNum,
+            field: "Data Duplikat",
+            message: "Dokumen ini sudah ada di database",
+          });
+        } else if (excelDuplicateTracker.has(uniqueKey)) {
+          rowErrors.push({
+            row: rowNum,
+            field: "Data Duplikat",
+            message: "Duplikat dengan baris lain di file ini",
+          });
+        } else {
+          excelDuplicateTracker.add(uniqueKey);
+        }
+      }
+
+      if (rowErrors.length > 0) {
+        errors.push(...rowErrors);
+      } else {
+        validRows.push({
+          doc_number: docNumRaw, // boleh string kosong untuk KAL
+          title: titleRaw,
+          status: status!,
+          source: source,
+          effective_date: isKal
+            ? undefined
+            : t === "itp"
+            ? itp_effective_date
+            : effective_date,
+          revision: t === "itp" ? revision ?? 0 : undefined,
+          test_report_no,
+          expiry_date,
+          no_order,
+          item_type,
+          brand,
+          model,
+          serial_no,
+          calibration_date,
+          type_id: typeId,
+          category_id: categoryId,
+          uploaded_by: uploadedBy,
+          type_name: typeName,
+        });
+      }
+    });
+
+    return { success: true, rows: validRows, errors };
+  } catch (e) {
+    console.error(e);
+    return { success: false, error: "Gagal memproses file Excel." };
+  }
+}
+
+export async function importExternalDocuments(
+  rows: ExternalImportRow[]
+): Promise<
+  { success: true; count: number } | { success: false; error: string }
+> {
+  if (!rows.length)
+    return { success: false, error: "Tidak ada data untuk diimport." };
+
+  let successCount = 0;
+
+  for (const row of rows) {
+    try {
+      const t = row.type_name.toLowerCase();
+      const isKal = t === "kal";
+
+      // 1. Insert ke documents
+      // Untuk KAL, doc_number boleh kosong -> simpan sebagai null supaya
+      // tidak melanggar constraint unik doc_number+revision jika ada
+      // beberapa baris KAL tanpa No. Dokumen.
+      const { data: doc, error: docError } = await supabaseAdmin
+        .from("documents")
+        .insert({
+          doc_number: row.doc_number || null,
+          title: row.title,
+          category_id: row.category_id,
+          type_id: row.type_id,
+          revision: row.revision ?? 0,
+          effective_date: row.effective_date ?? null,
+          expiry_date: row.expiry_date ?? null,
+          status: row.status,
+          uploaded_by: row.uploaded_by,
+        })
+        .select("id")
+        .single();
+
+      if (docError) {
+        if (docError.code === "23505") continue; // skip duplikat
+        return {
+          success: false,
+          error: `Gagal insert dokumen "${
+            (row.doc_number || row.no_order) ?? "(tanpa nomor)"
+          }": ${docError.message}`,
+        };
+      }
+
+      const document_id = doc.id;
+
+      // 2. Insert ke document_external (semua kecuali KAL)
+      if (!isKal) {
+        const { error: extError } = await supabaseAdmin
+          .from("document_external")
+          .insert({
+            document_id,
+            source: row.source ?? null,
+            test_report_no: row.test_report_no ?? null,
+          });
+
+        if (extError) {
+          return {
+            success: false,
+            error: `Gagal simpan data eksternal "${row.doc_number}": ${extError.message}`,
+          };
+        }
+      }
+
+      // 3. Insert ke document_external_kal (khusus KAL)
+      if (isKal) {
+        const { error: kalError } = await supabaseAdmin
+          .from("document_external_kal")
+          .insert({
+            document_id,
+            no_order: row.no_order ?? null,
+            item_type: row.item_type ?? null,
+            brand: row.brand ?? null,
+            model: row.model ?? null,
+            serial_no: row.serial_no ?? null,
+            calibration_date: row.calibration_date ?? null,
+          });
+
+        if (kalError) {
+          // Constraint unik pada no_order (perlu ditambahkan di DB, lihat catatan di bawah)
+          if (kalError.code === "23505") continue; // skip duplikat No. Order
+          return {
+            success: false,
+            error: `Gagal simpan data KAL "${row.no_order}": ${kalError.message}`,
+          };
+        }
+      }
+
+      successCount++;
+    } catch (e: any) {
+      return {
+        success: false,
+        error: `Error pada baris "${row.doc_number || row.no_order}": ${
+          e.message
+        }`,
+      };
+    }
+  }
+
+  REVALIDATE_PATHS.forEach((p) => revalidatePath(p));
+  return { success: true, count: successCount };
+}
+
+// ============================================================
+// EMPLOYEES — tambahkan ke app/lib/actions.ts
+// ============================================================
+
+// Schema
+const EmployeeSchema = z.object({
+  nik: z.string().min(1, "NIK wajib diisi"),
+  name: z.string().min(1, "Nama wajib diisi"),
+  department_id: z.string().optional().nullable(),
+  join_date: z.string().optional().nullable(),
+});
+
+// CREATE
+export async function createEmployee(formData: FormData) {
+  const parsed = EmployeeSchema.safeParse({
+    nik: formData.get("nik"),
+    name: formData.get("name"),
+    department_id: formData.get("department_id") || null,
+    join_date: formData.get("join_date") || null,
+  });
+  if (!parsed.success) return { error: parsed.error.errors[0].message };
+  const { nik, name, department_id, join_date } = parsed.data;
+
+  try {
+    const { error } = await supabaseAdmin
+      .from("master_employees")
+      .insert({ nik, name, department_id, join_date });
+    if (error) {
+      if (error.code === "23505") return { error: "NIK sudah terdaftar." };
+      return { error: "Gagal menambah karyawan." };
+    }
+    revalidatePath("/dashboard/master/employees");
+    return { success: true };
+  } catch {
+    return { error: "Gagal menambah karyawan." };
+  }
+}
+
+// UPDATE
+export async function updateEmployee(id: string, formData: FormData) {
+  const parsed = EmployeeSchema.safeParse({
+    nik: formData.get("nik"),
+    name: formData.get("name"),
+    department_id: formData.get("department_id") || null,
+    join_date: formData.get("join_date") || null,
+  });
+  if (!parsed.success) return { error: parsed.error.errors[0].message };
+  const { nik, name, department_id, join_date } = parsed.data;
+
+  try {
+    const { error } = await supabaseAdmin
+      .from("master_employees")
+      .update({
+        nik,
+        name,
+        department_id,
+        join_date,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", id);
+    if (error) {
+      if (error.code === "23505") return { error: "NIK sudah terdaftar." };
+      return { error: "Gagal mengupdate karyawan." };
+    }
+    revalidatePath("/dashboard/master/employees");
+    return { success: true };
+  } catch {
+    return { error: "Gagal mengupdate karyawan." };
+  }
+}
+
+// DELETE
+export async function deleteEmployee(id: string) {
+  try {
+    const { error } = await supabaseAdmin
+      .from("master_employees")
+      .delete()
+      .eq("id", id);
+    if (error) return { error: "Gagal menghapus karyawan." };
+    revalidatePath("/dashboard/master/employees");
+    return { success: true };
+  } catch {
+    return { error: "Gagal menghapus karyawan." };
+  }
+}
+
+// IMPORT BULK
+export async function importEmployees(
+  rows: {
+    nik: string;
+    name: string;
+    department_id: string | null;
+    join_date: string | null;
+  }[]
+): Promise<
+  { success: true; count: number } | { success: false; error: string }
+> {
+  if (!rows.length)
+    return { success: false, error: "Tidak ada data untuk diimport." };
+
+  try {
+    const { error } = await supabaseAdmin.from("master_employees").insert(rows);
+    if (error) {
+      if (error.code === "23505")
+        return {
+          success: false,
+          error: "Beberapa NIK sudah terdaftar (duplikat).",
+        };
+      return { success: false, error: "Gagal menyimpan data ke database." };
+    }
+    revalidatePath("/dashboard/master/employees");
+    return { success: true, count: rows.length };
+  } catch {
+    return { success: false, error: "Gagal mengimport karyawan." };
   }
 }

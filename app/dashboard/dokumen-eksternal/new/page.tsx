@@ -1,5 +1,5 @@
 import { auth } from "@/auth";
-import { getDepartments, getDocumentTypes } from "@/app/lib/data";
+import { getDocumentTypes } from "@/app/lib/data";
 import { supabaseAdmin } from "@/app/lib/supabase";
 import CreateExternalDocumentClient from "@/app/ui/create-external-document-client";
 import { Breadcrumb } from "@/app/ui/breadcrumb";
@@ -10,10 +10,7 @@ export default async function Page() {
   const session = await auth();
   const userId = (session?.user as any)?.id ?? "";
 
-  const [departments, documentTypes] = await Promise.all([
-    getDepartments(),
-    getDocumentTypes(),
-  ]);
+  const documentTypes = await getDocumentTypes();
 
   const { data: categoryData } = await supabaseAdmin
     .from("categories")
@@ -48,6 +45,7 @@ export default async function Page() {
           documentTypes={documentTypes}
           userId={userId}
           defaultCategoryId={CATEGORY_ID}
+          categoryId={CATEGORY_ID}
           redirectPath="/dashboard/dokumen-eksternal"
         />
       </div>
