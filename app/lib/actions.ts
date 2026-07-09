@@ -42,6 +42,23 @@ const STATUS_MAP: Record<string, string> = {
   dihapus: "dihapus",
 };
 
+// ── Production Type ──────────────────────────────────────────
+// HARUS persis sama dengan CHECK constraint di database:
+// production_type text CHECK (production_type = ANY (ARRAY[
+//   'production', 'non-production', 'production bahan baku', '-'
+// ]))
+// PENTING: kalau menambah/mengubah daftar ini, constraint di database
+// (documents_production_type_check) HARUS diupdate juga lewat migration:
+//   ALTER TABLE public.documents DROP CONSTRAINT documents_production_type_check;
+//   ALTER TABLE public.documents ADD CONSTRAINT documents_production_type_check
+//     CHECK (production_type = ANY (ARRAY['production','non-production','production bahan baku','-']));
+const VALID_PRODUCTION_TYPES = [
+  "production",
+  "non-production",
+  "production bahan baku",
+  "-",
+] as const;
+
 const PRODUCTION_TYPE_NORMALIZE: Record<string, string> = {
   production: "production",
   Production: "production",
@@ -50,13 +67,50 @@ const PRODUCTION_TYPE_NORMALIZE: Record<string, string> = {
   "prod. bahan baku": "production bahan baku",
   "Prod. Bahan Baku": "production bahan baku",
   "production bahan baku": "production bahan baku",
+  "-": "-",
 };
 
+// Placeholder yang dianggap "benar-benar tidak diisi" (null).
+// "-" TIDAK lagi masuk sini karena sekarang "-" adalah nilai valid tersendiri.
+const EMPTY_PLACEHOLDERS = [
+  "n/a",
+  "na",
+  "none",
+  "tidak ada",
+  "tidak diisi",
+  "belum diisi",
+];
+
+/**
+ * Normalisasi nilai Production Type dari input manual maupun Excel.
+ * PENTING: fungsi ini SELALU mengembalikan salah satu dari
+ * VALID_PRODUCTION_TYPES atau null — tidak pernah mengembalikan
+ * string sembarang, supaya tidak pernah melanggar check constraint
+ * di database (documents_production_type_check).
+ */
 function normalizeProductionType(
   val: string | null | undefined
 ): string | null {
   if (!val || !val.trim()) return null;
-  return PRODUCTION_TYPE_NORMALIZE[val.trim()] ?? val.trim().toLowerCase();
+
+  const trimmed = val.trim();
+
+  if (EMPTY_PLACEHOLDERS.includes(trimmed.toLowerCase())) return null;
+
+  const normalized =
+    PRODUCTION_TYPE_NORMALIZE[trimmed] ?? trimmed.toLowerCase();
+
+  if (
+    !VALID_PRODUCTION_TYPES.includes(
+      normalized as (typeof VALID_PRODUCTION_TYPES)[number]
+    )
+  ) {
+    // Nilai tidak dikenali (misal typo atau format lain) -> treat sebagai
+    // kosong daripada meloloskan string sembarang ke database.
+    return null;
+  }
+
+  return normalized;
 }
 
 // ============================================================
@@ -1000,16 +1054,29 @@ export async function parseImportData(
         expiry_date = parseDate(raw["Masa Berlaku"]) ?? undefined;
       }
 
+      // ── Production Type (khusus MSDS Kimia) — OPTIONAL ──
+      // Kolom ini tidak wajib diisi. Placeholder umum seperti "-", "N/A",
+      // atau kosong dianggap SENGAJA tidak diisi -> production_type = null,
+      // TANPA warning (ini kasus normal, bukan kesalahan input).
+      // Kalau ada nilai yang diisi tapi BUKAN placeholder dan BUKAN salah
+      // satu nilai valid (kemungkinan typo, misal "produksi"), baris tetap
+      // lolos diimport dengan production_type = null, tapi diberi warning
+      // di preview supaya user sadar ada kemungkinan typo.
       let production_type: string | undefined;
       if (isMsdsKimia) {
-        const pt = String(raw["Production Type"] ?? "").trim();
-        if (!pt)
+        const ptRaw = String(raw["Production Type"] ?? "").trim();
+        const isIntentionallyEmpty =
+          !ptRaw || EMPTY_PLACEHOLDERS.includes(ptRaw.toLowerCase());
+
+        production_type = normalizeProductionType(ptRaw) ?? undefined;
+
+        if (!isIntentionallyEmpty && !production_type) {
           rowErrors.push({
             row: rowNum,
             field: "Production Type",
-            message: "Wajib diisi",
+            message: `Nilai "${ptRaw}" tidak dikenali, akan disimpan sebagai kosong. Nilai valid: Production, Non-Production, Prod. Bahan Baku`,
           });
-        production_type = normalizeProductionType(pt) ?? undefined;
+        }
       }
 
       if (rowErrors.length > 0) {
@@ -1059,9 +1126,12 @@ export async function importDocuments(
       department_id: r.department_id ?? null,
       revision: r.revision,
       effective_date: r.effective_date ?? null,
+      // Pengaman tambahan: pastikan production_type yang masuk ke insert
+      // selalu melalui normalizeProductionType, walau seharusnya sudah
+      // divalidasi & dinormalisasi sejak tahap parseImportData.
       revision_date: r.revision_date ?? null,
       expiry_date: r.expiry_date ?? null,
-      production_type: r.production_type ?? null,
+      production_type: normalizeProductionType(r.production_type ?? null),
       status: r.status,
       uploaded_by: r.uploaded_by,
     }));
@@ -1075,6 +1145,11 @@ export async function importDocuments(
           success: false,
           error:
             "Beberapa dokumen sudah ada (nomor dokumen & revisi duplikat).",
+        };
+      if (error.code === "23514")
+        return {
+          success: false,
+          error: `Ada nilai yang tidak sesuai aturan database (${error.message}). Cek kolom Production Type.`,
         };
       return { success: false, error: "Gagal menyimpan data ke database." };
     }

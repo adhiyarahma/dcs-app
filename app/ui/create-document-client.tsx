@@ -34,6 +34,7 @@ const PRODUCTION_TYPE_OPTIONS = [
   { value: "production", label: "Production" },
   { value: "non-production", label: "Non-Production" },
   { value: "production bahan baku", label: "Production Bahan Baku" },
+  { value: "-", label: "-" },
 ] as const;
 
 export default function CreateDocumentClient({
