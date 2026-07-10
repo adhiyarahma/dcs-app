@@ -5,6 +5,9 @@ import {
   getDistributions,
   getDepartments,
   getActiveDocuments,
+  getAllDocumentsForDistribution,
+  getCategories,
+  getDocumentTypes,
 } from "@/app/lib/data";
 import { fetchNextFormNumber } from "@/app/lib/actions";
 import DistributionsTable from "@/app/ui/distributions-table";
@@ -13,13 +16,23 @@ export default async function DistributionsPage() {
   const session = await auth();
   if ((session?.user as any)?.role !== "admin") redirect("/dashboard");
 
-  const [distributions, departments, docOptions, initialFormNumber] =
-    await Promise.all([
-      getDistributions(),
-      getDepartments(),
-      getActiveDocuments(),
-      fetchNextFormNumber(),
-    ]);
+  const [
+    distributions,
+    departments,
+    docOptions,
+    allDocOptions,
+    initialFormNumber,
+    categories,
+    documentTypes,
+  ] = await Promise.all([
+    getDistributions(),
+    getDepartments(),
+    getActiveDocuments(),
+    getAllDocumentsForDistribution(),
+    fetchNextFormNumber(),
+    getCategories(),
+    getDocumentTypes(),
+  ]);
 
   const currentUserId = (session?.user as any)?.id ?? "";
 
@@ -37,8 +50,11 @@ export default async function DistributionsPage() {
         distributions={distributions}
         departments={departments}
         docOptions={docOptions}
+        allDocOptions={allDocOptions}
         currentUserId={currentUserId}
         initialFormNumber={initialFormNumber}
+        categories={categories}
+        documentTypes={documentTypes}
       />
     </div>
   );

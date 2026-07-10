@@ -26,6 +26,10 @@ type DocOption = {
   doc_number: string;
   title: string;
   revision: number;
+  // ← TAMBAHAN: status dokumen ("terbaru" | "kadaluarsa" | "dihapus").
+  // Optional supaya tetap kompatibel dengan docOptions (fallback prop)
+  // yang mungkin tidak menyertakan field ini.
+  status?: string;
 };
 
 interface RawRow {
@@ -59,6 +63,9 @@ interface ParsedItem {
   revision: number;
   distributed_date: string | null;
   recipients: { dept_id: string; dept_code: string; qty: number }[];
+  // ← TAMBAHAN: dibawa dari DocOption yang match, dipakai untuk badge
+  // "Kadaluarsa"/"Dihapus" di preview.
+  status?: string;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -94,6 +101,22 @@ function formatDateDisplay(s: string) {
   }
 }
 
+// ← TAMBAHAN: label & style badge status, dipakai di beberapa tempat
+function StatusBadge({ status }: { status?: string }) {
+  if (!status || status === "terbaru") return null;
+  const isDeleted = status === "dihapus";
+  return (
+    <span
+      className={clsx(
+        "text-[9px] px-1.5 py-0.5 rounded-full font-semibold shrink-0",
+        isDeleted ? "bg-red-50 text-red-600" : "bg-amber-50 text-amber-600"
+      )}
+    >
+      {isDeleted ? "Dihapus" : "Kadaluarsa"}
+    </span>
+  );
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 export default function ImportDistributionModal({
   onClose,
@@ -106,7 +129,9 @@ export default function ImportDistributionModal({
   docOptions: DocOption[];
   currentUserId: string;
 }) {
-  // ── Fetch semua dokumen (termasuk kadaluarsa) saat modal dibuka ─────────────
+  // ── Fetch SEMUA dokumen (termasuk kadaluarsa & dihapus) saat modal dibuka ──
+  // Endpoint /api/documents/all sengaja tidak memfilter status sama sekali,
+  // supaya import bisa mencocokkan dokumen lama yang sudah tidak aktif.
   const [allDocOptions, setAllDocOptions] = useState<DocOption[]>([]);
   const [loadingDocs, setLoadingDocs] = useState(true);
 
@@ -118,7 +143,8 @@ export default function ImportDistributionModal({
         setLoadingDocs(false);
       })
       .catch(() => {
-        // fallback ke docOptions prop (hanya terbaru) jika fetch gagal
+        // fallback ke docOptions prop (kemungkinan hanya dokumen aktif)
+        // kalau endpoint gagal diakses.
         setAllDocOptions(docOptions);
         setLoadingDocs(false);
       });
@@ -183,6 +209,9 @@ export default function ImportDistributionModal({
     return undefined;
   }
 
+  // ← Sudah mencari di allDocOptions (semua status) sejak awal — tidak
+  // berubah secara logika, hanya field `status` sekarang ikut terbawa
+  // pada object DocOption yang dikembalikan (dipakai untuk badge & warning).
   function findDoc(docNumber: string, revision: number): DocOption | undefined {
     const normalized = docNumber.trim().toLowerCase();
 
@@ -333,6 +362,17 @@ export default function ImportDistributionModal({
               return;
             }
 
+            // ← TAMBAHAN: dokumen kadaluarsa/dihapus TETAP boleh diimport
+            // (tidak masuk `errors`), tapi diberi tahu lewat `warnings`
+            // supaya kelihatan di preview sebelum user klik Import.
+            if (doc.status && doc.status !== "terbaru") {
+              warnings.push(
+                `Dokumen "${docNumber}" Rev.${revisi} berstatus ${
+                  doc.status === "dihapus" ? "DIHAPUS" : "KADALUARSA"
+                } — pastikan ini memang disengaja (biasanya untuk input data distribusi lama).`
+              );
+            }
+
             const overrideDateRaw = docRows[0].tanggal_dokumen;
             const overrideDate =
               overrideDateRaw && overrideDateRaw !== firstRow.tanggal_distribusi
@@ -392,6 +432,7 @@ export default function ImportDistributionModal({
               revision: doc.revision,
               distributed_date: overrideDate,
               recipients,
+              status: doc.status, // ← TAMBAHAN: dibawa untuk badge di preview
             });
           });
 
@@ -507,6 +548,14 @@ export default function ImportDistributionModal({
   const validCount = forms.filter((f) => f.errors.length === 0).length;
   const errorCount = forms.filter((f) => f.errors.length > 0).length;
 
+  // ← TAMBAHAN: hitung berapa dokumen non-aktif (kadaluarsa/dihapus) yang
+  // ikut terdeteksi di seluruh form, untuk ditampilkan sebagai ringkasan.
+  const inactiveDocCount = forms.reduce(
+    (sum, f) =>
+      sum + f.items.filter((it) => it.status && it.status !== "terbaru").length,
+    0
+  );
+
   // ── Render ──────────────────────────────────────────────────────────────────
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4">
@@ -572,6 +621,22 @@ export default function ImportDistributionModal({
                   </p>
                 </div>
               </button>
+
+              {/* ← TAMBAHAN: info bahwa import ini mendukung dokumen
+                  kadaluarsa/dihapus, supaya user tidak ragu saat input
+                  data distribusi lama. */}
+              <div className="flex items-start gap-2 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs text-slate-500">
+                <ExclamationTriangleIcon className="w-4 h-4 mt-0.5 shrink-0 text-slate-400" />
+                <span>
+                  Import ini mencocokkan nomor dokumen ke{" "}
+                  <span className="font-medium text-slate-600">
+                    semua status
+                  </span>{" "}
+                  (terbaru, kadaluarsa, maupun dihapus) — cocok untuk mencatat
+                  distribusi dokumen lama. Dokumen berstatus non-aktif akan
+                  ditandai di halaman preview sebelum diimport.
+                </span>
+              </div>
 
               {/* Drop zone */}
               {loadingDocs ? (
@@ -717,6 +782,19 @@ export default function ImportDistributionModal({
                 </div>
               )}
 
+              {/* ← TAMBAHAN: ringkasan dokumen non-aktif yang terdeteksi */}
+              {inactiveDocCount > 0 && (
+                <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-sm text-amber-700">
+                  <ExclamationTriangleIcon className="w-4 h-4 mt-0.5 shrink-0" />
+                  <span>
+                    {inactiveDocCount} dokumen dalam file ini berstatus{" "}
+                    <span className="font-semibold">kadaluarsa/dihapus</span>{" "}
+                    (ditandai dengan badge di daftar dokumen tiap form).
+                    Pastikan ini memang disengaja sebelum melanjutkan import.
+                  </span>
+                </div>
+              )}
+
               <div className="space-y-2">
                 {forms.map((form) => {
                   const hasError = form.errors.length > 0;
@@ -849,6 +927,8 @@ export default function ImportDistributionModal({
                                     <span className="text-[10px] bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded font-mono font-semibold shrink-0">
                                       Rev.{item.revision}
                                     </span>
+                                    {/* ← TAMBAHAN: badge status non-aktif */}
+                                    <StatusBadge status={item.status} />
                                     <span className="text-[11px] text-slate-500 truncate">
                                       {item.doc_title}
                                     </span>

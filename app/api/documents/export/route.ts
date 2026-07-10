@@ -661,32 +661,53 @@ export async function GET(request: NextRequest) {
   const typeName = typeData?.name ?? "";
   const template = TYPE_NAME_TO_TEMPLATE[typeName] ?? "default";
 
-  // Gunakan .in() untuk status karena tipenya sekarang array
-  let query = supabaseAdmin
-    .from("documents")
-    .select(
+  // ── Ambil SEMUA dokumen yang match filter, dengan pagination manual ──────
+  // PENTING: Supabase/PostgREST punya default "max-rows" = 1000 baris per
+  // request. Kalau query dikirim tanpa .range() dan hasilnya lebih dari
+  // 1000 baris, sisanya akan terpotong secara DIAM-DIAM (tanpa error) —
+  // ini yang menyebabkan file export sebelumnya selalu mentok di 1000 baris
+  // meskipun total dokumen di database lebih banyak. Loop di bawah ini
+  // menarik data per halaman 1000 baris sampai benar-benar habis, sama
+  // seperti pola yang sudah dipakai di fungsi-fungsi lain (getDocumentsByCategory,
+  // getAllDocumentsForImport, fetchDeletedDocuments, dll di app/lib/data.ts).
+  const PAGE = 1000;
+  let docs: any[] = [];
+  let from = 0;
+
+  while (true) {
+    let query = supabaseAdmin
+      .from("documents")
+      .select(
+        `
+        id, doc_number, title, revision, effective_date,
+        revision_date, expiry_date, production_type, status,
+        departments(code, name)
       `
-      id, doc_number, title, revision, effective_date,
-      revision_date, expiry_date, production_type, status,
-      departments(code, name)
-    `
-    )
-    .eq("category_id", categoryId)
-    .eq("type_id", typeId)
-    .in("status", statuses)
-    .order("doc_number");
+      )
+      .eq("category_id", categoryId)
+      .eq("type_id", typeId)
+      .in("status", statuses)
+      .order("doc_number")
+      .range(from, from + PAGE - 1);
 
-  // Gunakan .in() untuk departemen jika ada yang dipilih
-  if (departmentIds.length > 0) {
-    query = query.in("department_id", departmentIds);
+    if (departmentIds.length > 0) {
+      query = query.in("department_id", departmentIds);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      return NextResponse.json(
+        { error: "Gagal mengambil data." },
+        { status: 500 }
+      );
+    }
+    if (!data || data.length === 0) break;
+
+    docs = [...docs, ...data];
+    if (data.length < PAGE) break;
+    from += PAGE;
   }
-
-  const { data: docs, error } = await query;
-  if (error)
-    return NextResponse.json(
-      { error: "Gagal mengambil data." },
-      { status: 500 }
-    );
 
   const wb = new ExcelJS.Workbook();
   wb.creator = "DCS System";
@@ -704,20 +725,20 @@ export async function GET(request: NextRequest) {
 
   if (template === "msds_benang") {
     buildMsdsHeader(ws, categoryName, typeName);
-    lastDataRow = buildMsdsBenangTable(ws, docs ?? []);
+    lastDataRow = buildMsdsBenangTable(ws, docs);
     footerRef = "FL-MRP-018, REV 01";
     footerCol = 4; // kolom D
     freezeRow = 16;
   } else if (template === "msds_kimia") {
     buildMsdsHeader(ws, categoryName, typeName);
-    lastDataRow = buildMsdsKimiaTable(ws, docs ?? []);
+    lastDataRow = buildMsdsKimiaTable(ws, docs);
     footerRef = "FL-MRP-018, REV 01";
     footerCol = 4; // kolom D
     freezeRow = 16;
   } else {
     // QESH (dan fallback)
     buildQeshHeader(ws, typeName);
-    lastDataRow = buildQeshTable(ws, docs ?? []);
+    lastDataRow = buildQeshTable(ws, docs);
     footerRef = "FL-MRP-003, REV 03";
     footerCol = 5; // kolom E
     freezeRow = 13;

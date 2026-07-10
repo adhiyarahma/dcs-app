@@ -17,8 +17,13 @@ import {
   ChevronUpDownIcon,
   ChevronRightIcon,
   ChevronLeftIcon,
+  ArchiveBoxXMarkIcon,
 } from "@heroicons/react/24/outline";
-import { permanentDeleteDocument } from "@/app/lib/actions";
+import {
+  permanentDeleteDocument,
+  markDocumentAsDeleted,
+  forceDeleteDocument,
+} from "@/app/lib/actions";
 import ExportDocumentModal from "@/app/ui/ExportDocumentModal";
 
 type Doc = {
@@ -161,14 +166,25 @@ function Pagination({
 function DeleteModal({
   doc,
   onConfirm,
+  onForceConfirm,
   onCancel,
   loading,
+  forceLoading,
+  error,
 }: {
   doc: Doc;
   onConfirm: () => void;
+  onForceConfirm: () => void;
   onCancel: () => void;
   loading: boolean;
+  forceLoading: boolean;
+  error?: string | null;
 }) {
+  // ← TAMBAHAN: opsi "Hapus Paksa" hanya bisa ditekan setelah user secara
+  // sadar mencentang checkbox konfirmasi risiko — mencegah klik tidak
+  // sengaja pada aksi yang memutus tautan revisi/distribusi.
+  const [confirmForce, setConfirmForce] = useState(false);
+
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4">
       <div
@@ -190,21 +206,68 @@ function DeleteModal({
           <p className="text-xs text-red-400 mt-1 font-medium">
             ⚠ Dokumen akan dihapus permanen dan tidak bisa dipulihkan.
           </p>
+          {/* Pesan error dari percobaan hapus biasa */}
+          {error && (
+            <div className="mt-3 w-full px-3 py-2 bg-red-50 border border-red-200 rounded-lg">
+              <p className="text-xs text-red-600 font-medium text-left">
+                {error}
+              </p>
+            </div>
+          )}
+          {/* ← TAMBAHAN: opsi Hapus Paksa, hanya muncul setelah hapus biasa
+              gagal. Dipakai untuk kasus dokumen salah input yang memang
+              harus dihapus total meski masih terikat data lain. */}
+          {error && (
+            <div className="mt-3 w-full px-3 py-3 bg-amber-50 border border-amber-200 rounded-lg text-left">
+              <p className="text-xs font-bold text-amber-800 mb-1">
+                Tetap ingin menghapus paksa?
+              </p>
+              <p className="text-xs text-amber-700 mb-2">
+                Ini akan otomatis memutus tautan revisi (dokumen anak tidak
+                ikut terhapus, hanya kehilangan referensi ke dokumen ini)
+                dan menghapus riwayat distribusi yang terkait dengan
+                dokumen ini secara permanen. Gunakan hanya jika dokumen ini
+                memang salah input dan harus lenyap total.
+              </p>
+              <label className="flex items-start gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={confirmForce}
+                  onChange={(e) => setConfirmForce(e.target.checked)}
+                  className="mt-0.5 w-3.5 h-3.5 rounded border-amber-300 text-amber-600 accent-amber-600 cursor-pointer"
+                />
+                <span className="text-xs text-amber-800">
+                  Saya paham risikonya dan tetap ingin menghapus paksa.
+                </span>
+              </label>
+            </div>
+          )}
         </div>
         <div className="flex gap-2 px-6 pb-6">
           <button
             onClick={onCancel}
             className="flex-1 px-4 py-2.5 text-sm font-medium border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 transition-all"
           >
-            Batal
+            {error ? "Tutup" : "Batal"}
           </button>
-          <button
-            onClick={onConfirm}
-            disabled={loading}
-            className="flex-1 px-4 py-2.5 text-sm font-bold bg-red-600 text-white rounded-xl hover:bg-red-700 disabled:opacity-50 transition-all"
-          >
-            {loading ? "Menghapus..." : "Hapus Permanen"}
-          </button>
+          {!error && (
+            <button
+              onClick={onConfirm}
+              disabled={loading}
+              className="flex-1 px-4 py-2.5 text-sm font-bold bg-red-600 text-white rounded-xl hover:bg-red-700 disabled:opacity-50 transition-all"
+            >
+              {loading ? "Menghapus..." : "Hapus Permanen"}
+            </button>
+          )}
+          {error && (
+            <button
+              onClick={onForceConfirm}
+              disabled={!confirmForce || forceLoading}
+              className="flex-1 px-4 py-2.5 text-sm font-bold bg-amber-600 text-white rounded-xl hover:bg-amber-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+            >
+              {forceLoading ? "Menghapus Paksa..." : "Hapus Paksa"}
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -217,12 +280,15 @@ function BulkDeleteModal({
   onConfirm,
   onCancel,
   loading,
+  errors,
 }: {
   count: number;
   onConfirm: () => void;
   onCancel: () => void;
   loading: boolean;
+  errors?: string[];
 }) {
+  const hasErrors = errors && errors.length > 0;
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4">
       <div
@@ -237,31 +303,53 @@ function BulkDeleteModal({
           <h2 className="text-sm font-bold text-slate-800 mb-1">
             Hapus Permanen
           </h2>
-          <p className="text-sm text-slate-500">
-            Hapus{" "}
-            <span className="font-semibold text-slate-700">
-              {count} dokumen
-            </span>{" "}
-            yang dipilih?
-          </p>
-          <p className="text-xs text-red-400 mt-1 font-medium">
-            ⚠ Semua dokumen akan dihapus permanen dan tidak bisa dipulihkan.
-          </p>
+          {!hasErrors && (
+            <>
+              <p className="text-sm text-slate-500">
+                Hapus{" "}
+                <span className="font-semibold text-slate-700">
+                  {count} dokumen
+                </span>{" "}
+                yang dipilih?
+              </p>
+              <p className="text-xs text-red-400 mt-1 font-medium">
+                ⚠ Semua dokumen akan dihapus permanen dan tidak bisa
+                dipulihkan.
+              </p>
+            </>
+          )}
+          {/* ← TAMBAHAN: tampilkan daftar dokumen yang gagal dihapus */}
+          {hasErrors && (
+            <div className="mt-1 w-full max-h-40 overflow-y-auto px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-left">
+              <p className="text-xs font-bold text-red-700 mb-1">
+                {errors!.length} dokumen gagal dihapus:
+              </p>
+              <ul className="space-y-1">
+                {errors!.map((e, i) => (
+                  <li key={i} className="text-xs text-red-600">
+                    • {e}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
         <div className="flex gap-2 px-6 pb-6">
           <button
             onClick={onCancel}
             className="flex-1 px-4 py-2.5 text-sm font-medium border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 transition-all"
           >
-            Batal
+            {hasErrors ? "Tutup" : "Batal"}
           </button>
-          <button
-            onClick={onConfirm}
-            disabled={loading}
-            className="flex-1 px-4 py-2.5 text-sm font-bold bg-red-600 text-white rounded-xl hover:bg-red-700 disabled:opacity-50 transition-all"
-          >
-            {loading ? "Menghapus..." : `Hapus ${count} Dokumen`}
-          </button>
+          {!hasErrors && (
+            <button
+              onClick={onConfirm}
+              disabled={loading}
+              className="flex-1 px-4 py-2.5 text-sm font-bold bg-red-600 text-white rounded-xl hover:bg-red-700 disabled:opacity-50 transition-all"
+            >
+              {loading ? "Menghapus..." : `Hapus ${count} Dokumen`}
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -275,6 +363,78 @@ function getRowClass(status: string, isChild: boolean) {
   return "bg-white hover:bg-slate-50";
 }
 
+// ─── Mark-as-Deleted (Soft Delete) Modal ──────────────────────────────────
+// Beda dengan DeleteModal (hapus permanen dari database), modal ini hanya
+// mengubah status dokumen menjadi "dihapus" — dokumen tetap ada di database
+// dan bisa dipulihkan lewat halaman Trash.
+function MarkDeletedModal({
+  doc,
+  onConfirm,
+  onCancel,
+  loading,
+  error,
+}: {
+  doc: Doc;
+  onConfirm: () => void;
+  onCancel: () => void;
+  loading: boolean;
+  error?: string | null;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4">
+      <div
+        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+        onClick={onCancel}
+      />
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm">
+        <div className="px-6 pt-6 pb-4 flex flex-col items-center text-center">
+          <div className="w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center mb-3">
+            <ArchiveBoxXMarkIcon className="w-6 h-6 text-amber-600" />
+          </div>
+          <h2 className="text-sm font-bold text-slate-800 mb-1">
+            Tandai Sebagai Dihapus
+          </h2>
+          <p className="text-sm text-slate-500">
+            Ubah status{" "}
+            <span className="font-semibold text-slate-700">"{doc.title}"</span>{" "}
+            (Rev. {doc.revision}) dari{" "}
+            <span className="font-mono text-xs">kadaluarsa</span> menjadi{" "}
+            <span className="font-mono text-xs">dihapus</span>?
+          </p>
+          <p className="text-xs text-slate-400 mt-1 font-medium">
+            Dokumen akan pindah ke Trash. Tidak permanen — masih bisa
+            dipulihkan lagi kapan saja lewat halaman Trash.
+          </p>
+          {error && (
+            <div className="mt-3 w-full px-3 py-2 bg-red-50 border border-red-200 rounded-lg">
+              <p className="text-xs text-red-600 font-medium text-left">
+                {error}
+              </p>
+            </div>
+          )}
+        </div>
+        <div className="flex gap-2 px-6 pb-6">
+          <button
+            onClick={onCancel}
+            className="flex-1 px-4 py-2.5 text-sm font-medium border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 transition-all"
+          >
+            {error ? "Tutup" : "Batal"}
+          </button>
+          {!error && (
+            <button
+              onClick={onConfirm}
+              disabled={loading}
+              className="flex-1 px-4 py-2.5 text-sm font-bold bg-amber-600 text-white rounded-xl hover:bg-amber-700 disabled:opacity-50 transition-all"
+            >
+              {loading ? "Memproses..." : "Ya, Tandai Dihapus"}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── DocumentGroupRow ─────────────────────────────────────────────────────
 function DocumentGroupRow({
   group,
@@ -284,9 +444,9 @@ function DocumentGroupRow({
   cfg,
   isAdmin,
   setDeleteTarget,
+  setStatusTarget,
   selectedIds,
   onToggleSelect,
-  // ← TAMBAHAN: basePath
   basePath,
 }: {
   group: { latest: Doc; history: Doc[] };
@@ -296,9 +456,10 @@ function DocumentGroupRow({
   cfg: any;
   isAdmin: boolean;
   setDeleteTarget: (d: Doc) => void;
+  setStatusTarget: (d: Doc) => void;
   selectedIds: Set<string>;
   onToggleSelect: (id: string) => void;
-  basePath: string; // ← TAMBAHAN
+  basePath: string;
 }) {
   const hasHistory = group.history.length > 0;
 
@@ -459,13 +620,24 @@ function DocumentGroupRow({
         <td className="px-6 py-4">
           <div className="flex justify-end gap-1.5">
             {doc.status === "terbaru" && (
-              // ← PERUBAHAN: pakai basePath
               <a
                 href={`${basePath}/${doc.id}/edit`}
                 className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors inline-flex"
               >
                 <PencilIcon className="w-4 h-4" />
               </a>
+            )}
+            {/* ← TAMBAHAN: tandai dokumen kadaluarsa jadi "dihapus" (soft
+                delete), tanpa perlu hapus permanen yang bisa gagal karena
+                foreign key. */}
+            {doc.status === "kadaluarsa" && (
+              <button
+                onClick={() => setStatusTarget(doc)}
+                title="Tandai sebagai dihapus"
+                className="p-2 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
+              >
+                <ArchiveBoxXMarkIcon className="w-4 h-4" />
+              </button>
             )}
             <button
               onClick={() => setDeleteTarget(doc)}
@@ -517,7 +689,6 @@ export default function DocumentsClient({
   documentTypes,
   role,
   userId,
-  // ← TAMBAHAN: basePath
   basePath = "/dashboard/documents",
 }: {
   documents: Doc[];
@@ -526,9 +697,8 @@ export default function DocumentsClient({
   documentTypes: DocType[];
   role: string;
   userId: string;
-  basePath?: string; // ← TAMBAHAN
+  basePath?: string;
 }) {
-  console.log("basePath received:", basePath); // ← tambah ini
   const isAdmin = role === "admin";
   const [search, setSearch] = useState("");
   const [filterCategory, setFilterCategory] = useState("");
@@ -537,6 +707,17 @@ export default function DocumentsClient({
   const [filterStatus, setFilterStatus] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<Doc | null>(null);
   const [loading, setLoading] = useState(false);
+  // ← TAMBAHAN: simpan pesan error saat penghapusan gagal, supaya bisa
+  // ditampilkan ke user alih-alih diam-diam diabaikan.
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  // ← TAMBAHAN: loading state terpisah untuk aksi "Hapus Paksa"
+  const [forceDeleteLoading, setForceDeleteLoading] = useState(false);
+  const [bulkDeleteErrors, setBulkDeleteErrors] = useState<string[]>([]);
+  // ← TAMBAHAN: state untuk aksi "tandai sebagai dihapus" (soft delete
+  // status kadaluarsa -> dihapus, per satu baris/revisi saja).
+  const [statusTarget, setStatusTarget] = useState<Doc | null>(null);
+  const [statusLoading, setStatusLoading] = useState(false);
+  const [statusError, setStatusError] = useState<string | null>(null);
   const [sortKey, setSortKey] = useState<SortKey>("effective_date");
   const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
   const [currentPage, setCurrentPage] = useState(1);
@@ -637,6 +818,19 @@ export default function DocumentsClient({
     isCategoryPage,
   ]);
 
+  // ← TAMBAHAN: total dokumen (flat, termasuk histori revisi) yang cocok
+  // dengan filter & pencarian yang sedang aktif. Reaktif otomatis karena
+  // groupedDocs sudah bergantung pada search/filterCategory/filterType/
+  // filterDept/filterStatus.
+  const filteredCount = useMemo(
+    () => groupedDocs.reduce((acc, g) => acc + 1 + g.history.length, 0),
+    [groupedDocs]
+  );
+
+  // Jumlah grup dokumen (unik per doc_number) yang cocok filter — berguna
+  // kalau ingin ditampilkan terpisah dari total termasuk histori.
+  const filteredGroupCount = groupedDocs.length;
+
   const visibleIdsOnPage = useMemo(() => {
     const ids: string[] = [];
     const paginated = groupedDocs.slice(
@@ -690,9 +884,43 @@ export default function DocumentsClient({
   async function handleDelete() {
     if (!deleteTarget) return;
     setLoading(true);
-    await permanentDeleteDocument(deleteTarget.id);
+    setDeleteError(null);
+    const result = await permanentDeleteDocument(deleteTarget.id);
     setLoading(false);
+
+    // ← PERBAIKAN: kalau server mengembalikan error, tampilkan ke user dan
+    // jangan tutup modal seolah-olah berhasil.
+    if (result?.error) {
+      setDeleteError(result.error);
+      return;
+    }
+
     setDeleteTarget(null);
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      next.delete(deleteTarget.id);
+      return next;
+    });
+  }
+
+  // ← TAMBAHAN: hapus paksa — dipakai setelah hapus biasa gagal karena
+  // dokumen masih terikat (parent_id / distribution_items). Fungsi ini
+  // memutus tautan tsb terlebih dulu lalu menghapus dokumennya.
+  async function handleForceDelete() {
+    if (!deleteTarget) return;
+    setForceDeleteLoading(true);
+    const result = await forceDeleteDocument(deleteTarget.id);
+    setForceDeleteLoading(false);
+
+    if (result?.error) {
+      // Tetap tampilkan error terbaru (menimpa pesan sebelumnya) supaya
+      // user tahu kenapa hapus paksa pun masih gagal.
+      setDeleteError(result.error);
+      return;
+    }
+
+    setDeleteTarget(null);
+    setDeleteError(null);
     setSelectedIds((prev) => {
       const next = new Set(prev);
       next.delete(deleteTarget.id);
@@ -702,12 +930,63 @@ export default function DocumentsClient({
 
   async function handleBulkDelete() {
     setLoading(true);
-    await Promise.all(
-      Array.from(selectedIds).map((id) => permanentDeleteDocument(id))
+    setBulkDeleteErrors([]);
+
+    const idsToDelete = Array.from(selectedIds);
+    const results = await Promise.all(
+      idsToDelete.map(async (id) => ({
+        id,
+        result: await permanentDeleteDocument(id),
+      }))
     );
     setLoading(false);
+
+    // ← PERBAIKAN: kumpulkan dokumen mana saja yang gagal dihapus beserta
+    // alasannya, alih-alih mengabaikan hasilnya begitu saja.
+    const failed = results.filter((r) => r.result?.error);
+    const succeededIds = results
+      .filter((r) => !r.result?.error)
+      .map((r) => r.id);
+
+    // Hapus dari daftar pilihan hanya yang benar-benar berhasil dihapus,
+    // supaya yang gagal tetap tercentang dan bisa dicoba lagi / dilihat.
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      succeededIds.forEach((id) => next.delete(id));
+      return next;
+    });
+
+    if (failed.length > 0) {
+      const messages = failed.map((f) => {
+        const doc = documents.find((d) => d.id === f.id);
+        const label = doc ? `${doc.doc_number} (${doc.title})` : f.id;
+        return `${label}: ${f.result?.error}`;
+      });
+      setBulkDeleteErrors(messages);
+      return; // biarkan modal terbuka menampilkan daftar error
+    }
+
     setShowBulkDeleteModal(false);
     setSelectedIds(new Set());
+  }
+
+  // ← TAMBAHAN: handler untuk menandai satu dokumen (biasanya berstatus
+  // "kadaluarsa" karena salah input) menjadi "dihapus". Ini soft delete —
+  // hanya mengubah status, tidak menyentuh baris/relasi lain sama sekali,
+  // jadi tidak akan pernah gagal karena foreign key seperti hapus permanen.
+  async function handleMarkDeleted() {
+    if (!statusTarget) return;
+    setStatusLoading(true);
+    setStatusError(null);
+    const result = await markDocumentAsDeleted(statusTarget.id);
+    setStatusLoading(false);
+
+    if (result?.error) {
+      setStatusError(result.error);
+      return;
+    }
+
+    setStatusTarget(null);
   }
 
   const handleSort = (key: SortKey) => {
@@ -842,13 +1121,22 @@ export default function DocumentsClient({
         {isAdmin && (
           <div className="flex gap-1 shrink-0">
             {doc.status === "terbaru" && (
-              // ← PERUBAHAN: pakai basePath
               <a
                 href={`${basePath}/${doc.id}/edit`}
                 className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors inline-flex"
               >
                 <PencilIcon className="w-4 h-4" />
               </a>
+            )}
+            {/* ← TAMBAHAN: tandai dokumen kadaluarsa jadi "dihapus" */}
+            {doc.status === "kadaluarsa" && (
+              <button
+                onClick={() => setStatusTarget(doc)}
+                title="Tandai sebagai dihapus"
+                className="p-2 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
+              >
+                <ArchiveBoxXMarkIcon className="w-4 h-4" />
+              </button>
             )}
             <button
               onClick={() => setDeleteTarget(doc)}
@@ -931,7 +1219,6 @@ export default function DocumentsClient({
             <DocumentTextIcon className="w-4 h-4" /> Export Excel
           </button>
           {isAdmin && (
-            // ← PERUBAHAN: pakai basePath
             <a
               href={`${basePath}/new`}
               className="flex items-center justify-center gap-2 bg-slate-900 text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:bg-slate-800 transition-all active:scale-95 shrink-0"
@@ -1041,6 +1328,31 @@ export default function DocumentsClient({
             </button>
           )}
         </div>
+
+        {/* ← TAMBAHAN: info jumlah dokumen sesuai filter/pencarian aktif */}
+        <div className="px-1">
+          <p className="text-xs text-slate-500">
+            Menampilkan{" "}
+            <span className="font-bold text-slate-700">{filteredCount}</span>{" "}
+            dari{" "}
+            <span className="font-semibold text-slate-600">
+              {totalDokumen}
+            </span>{" "}
+            dokumen
+            {filteredGroupCount !== filteredCount && (
+              <span className="text-slate-400">
+                {" "}
+                ({filteredGroupCount} nomor dokumen)
+              </span>
+            )}
+            {(hasAnyFilter || search) && (
+              <span className="text-blue-500 font-medium">
+                {" "}
+                — sesuai filter aktif
+              </span>
+            )}
+          </p>
+        </div>
       </div>
 
       {/* Bulk action bar */}
@@ -1058,7 +1370,10 @@ export default function DocumentsClient({
             </button>
           </div>
           <button
-            onClick={() => setShowBulkDeleteModal(true)}
+            onClick={() => {
+              setBulkDeleteErrors([]);
+              setShowBulkDeleteModal(true);
+            }}
             className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white text-sm font-bold rounded-xl hover:bg-red-700 transition-all active:scale-95"
           >
             <TrashIcon className="w-4 h-4" /> Hapus {selectedIds.size} Dokumen
@@ -1142,6 +1457,7 @@ export default function DocumentsClient({
                   cfg={cfg}
                   isAdmin={isAdmin}
                   setDeleteTarget={setDeleteTarget}
+                  setStatusTarget={setStatusTarget}
                   selectedIds={selectedIds}
                   onToggleSelect={toggleSelectOne}
                   basePath={basePath}
@@ -1219,16 +1535,39 @@ export default function DocumentsClient({
         <DeleteModal
           doc={deleteTarget}
           onConfirm={handleDelete}
-          onCancel={() => setDeleteTarget(null)}
+          onForceConfirm={handleForceDelete}
+          onCancel={() => {
+            setDeleteTarget(null);
+            setDeleteError(null);
+          }}
           loading={loading}
+          forceLoading={forceDeleteLoading}
+          error={deleteError}
         />
       )}
       {showBulkDeleteModal && (
         <BulkDeleteModal
           count={selectedIds.size}
           onConfirm={handleBulkDelete}
-          onCancel={() => setShowBulkDeleteModal(false)}
+          onCancel={() => {
+            setShowBulkDeleteModal(false);
+            setBulkDeleteErrors([]);
+          }}
           loading={loading}
+          errors={bulkDeleteErrors}
+        />
+      )}
+      {/* ← TAMBAHAN: modal konfirmasi "tandai sebagai dihapus" */}
+      {statusTarget && (
+        <MarkDeletedModal
+          doc={statusTarget}
+          onConfirm={handleMarkDeleted}
+          onCancel={() => {
+            setStatusTarget(null);
+            setStatusError(null);
+          }}
+          loading={statusLoading}
+          error={statusError}
         />
       )}
       {showExport && (

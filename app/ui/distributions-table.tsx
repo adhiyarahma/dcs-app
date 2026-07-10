@@ -18,6 +18,7 @@ import {
   ArrowPathIcon,
   EyeIcon,
   ArrowUpTrayIcon,
+  FunnelIcon,
 } from "@heroicons/react/24/outline";
 import DistributionSpreadsheetView from "./DistributionSpreadsheetView";
 import ImportDistributionModal from "./ImportDistributionModal";
@@ -47,6 +48,7 @@ type DocOption = {
   revision: number;
   type_name: string;
   dept_code: string;
+  status?: string; // "terbaru" | "kadaluarsa" | "dihapus"
 };
 
 type DistRecipient = {
@@ -65,6 +67,8 @@ type DistItem = {
     doc_number: string;
     title: string;
     revision: number;
+    category_id?: string | null;
+    type_id?: string | null;
   } | null;
   recipients: DistRecipient[];
 };
@@ -84,6 +88,17 @@ type ItemFormEntry = {
   document_id: string;
   override_date: string | null;
   recipients: DistributionRecipientInput[];
+};
+
+type CategoryOpt = {
+  id: string;
+  name: string;
+};
+
+type DocTypeOpt = {
+  id: string;
+  name: string;
+  category_id: string;
 };
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -107,6 +122,17 @@ function getDeptHead(dept: Dept | null): Head | null {
 
 function emptyItem(): ItemFormEntry {
   return { document_id: "", override_date: null, recipients: [] };
+}
+
+// Ambil kategori & jenis dokumen "perwakilan" dari sebuah form distribusi.
+// Asumsi bisnis: 1 form distribusi = 1 jenis dokumen yang sama, jadi cukup
+// ambil dari dokumen pertama yang tersedia dalam item-nya.
+function getDistDocInfo(dist: Distribution) {
+  const doc = dist.items.find((i) => i.document)?.document;
+  return {
+    category_id: doc?.category_id ?? null,
+    type_id: doc?.type_id ?? null,
+  };
 }
 
 // ─── Pagination ───────────────────────────────────────────────────────────────
@@ -317,15 +343,18 @@ function DocDropdown({
                   }}
                   className="w-full px-4 py-2.5 text-left hover:bg-slate-50 transition-colors"
                 >
-                  <p className="text-xs font-bold text-slate-700">
+                  <p className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
                     {doc.doc_number}
-                  </p>
-                  <p className="text-xs text-slate-500 truncate">{doc.title}</p>
-                  <p className="text-[10px] text-slate-400 mt-0.5">
-                    Rev. {doc.revision} · {doc.type_name}
-                    {doc.dept_code && (
-                      <span className="font-mono font-bold text-blue-600 ml-1">
-                        · {doc.dept_code}
+                    {doc.status && doc.status !== "terbaru" && (
+                      <span
+                        className={clsx(
+                          "text-[9px] px-1.5 py-0.5 rounded-full font-semibold",
+                          doc.status === "dihapus"
+                            ? "bg-red-50 text-red-600"
+                            : "bg-amber-50 text-amber-600"
+                        )}
+                      >
+                        {doc.status === "dihapus" ? "Dihapus" : "Kadaluarsa"}
                       </span>
                     )}
                   </p>
@@ -660,12 +689,14 @@ function ItemRow({
 }
 
 // ─── Form Modal ───────────────────────────────────────────────────────────────
+// ─── Form Modal ───────────────────────────────────────────────────────────────
 function FormModal({
   title,
   onClose,
   onImport,
   departments,
   docOptions,
+  allDocOptions,
   defaultValues,
   createdBy,
   initialFormNumber,
@@ -678,7 +709,10 @@ function FormModal({
   defaultValues?: Distribution;
   createdBy: string;
   initialFormNumber?: string;
+  allDocOptions: DocOption[];
 }) {
+  const [includeInactive, setIncludeInactive] = useState(false);
+  const activeDocOptions = includeInactive ? allDocOptions : docOptions;
   const isEdit = !!defaultValues;
   const dccDepartments = departments.filter((d) => d.code === DCC_CODE);
 
@@ -715,7 +749,7 @@ function FormModal({
   const handedByHead = getDeptHead(handedByDept ?? null);
 
   const firstDocId = items.find((i) => i.document_id)?.document_id;
-  const firstDoc = docOptions.find((d) => d.id === firstDocId);
+  const firstDoc = activeDocOptions.find((d) => d.id === firstDocId);
   const lockedDeptCode = firstDoc?.dept_code ?? null;
 
   const usedDocIds = items.map((i) => i.document_id).filter(Boolean);
@@ -735,10 +769,10 @@ function FormModal({
   function updateItem(index: number, val: ItemFormEntry) {
     const next = [...items];
     if (index === 0 && val.document_id !== items[0].document_id) {
-      const newDoc = docOptions.find((d) => d.id === val.document_id);
+      const newDoc = activeDocOptions.find((d) => d.id === val.document_id);
       const newDeptCode = newDoc?.dept_code ?? null;
       const resetOthers = next.slice(1).map((item) => {
-        const doc = docOptions.find((d) => d.id === item.document_id);
+        const doc = activeDocOptions.find((d) => d.id === item.document_id);
         if (doc && newDeptCode && doc.dept_code !== newDeptCode) {
           return { ...item, document_id: "" };
         }
@@ -770,7 +804,7 @@ function FormModal({
       (i) => i.recipients.length === 0
     );
     if (itemWithNoRecipient) {
-      const doc = docOptions.find(
+      const doc = activeDocOptions.find(
         (d) => d.id === itemWithNoRecipient.document_id
       );
       setError(`Dokumen ${doc?.doc_number ?? ""} belum memiliki penerima.`);
@@ -945,6 +979,20 @@ function FormModal({
                 )}
               </div>
 
+              <label className="flex items-center gap-2 mb-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={includeInactive}
+                  onChange={(e) => setIncludeInactive(e.target.checked)}
+                  className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                />
+                <span className="text-xs text-slate-500">
+                  Sertakan dokumen{" "}
+                  <span className="font-medium">kadaluarsa/dihapus</span>{" "}
+                  (khusus input data lama)
+                </span>
+              </label>
+
               <div className="space-y-2">
                 {items.map((item, index) => (
                   <ItemRow
@@ -953,7 +1001,7 @@ function FormModal({
                     item={item}
                     defaultDate={distributedDate}
                     departments={departments}
-                    docOptions={docOptions}
+                    docOptions={activeDocOptions}
                     usedDocIds={usedDocIds}
                     lockedDeptCode={lockedDeptCode}
                     onChange={(v) => updateItem(index, v)}
@@ -1081,12 +1129,16 @@ export default function DistributionsTable({
   docOptions,
   currentUserId,
   initialFormNumber,
+  categories,
+  documentTypes,
 }: {
   distributions: Distribution[];
   departments: Dept[];
   docOptions: DocOption[];
   currentUserId: string;
   initialFormNumber: string;
+  categories: CategoryOpt[];
+  documentTypes: DocTypeOpt[];
 }) {
   const [search, setSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -1098,6 +1150,28 @@ export default function DistributionsTable({
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteError, setDeleteError] = useState("");
   const [nextFormNumber, setNextFormNumber] = useState(initialFormNumber);
+
+  // ─── Filter kategori & jenis dokumen ──────────────────────────────────────
+  const [filterCategory, setFilterCategory] = useState("");
+  const [filterType, setFilterType] = useState("");
+
+  const availableTypes = useMemo(
+    () =>
+      filterCategory
+        ? documentTypes.filter((t) => t.category_id === filterCategory)
+        : documentTypes,
+    [documentTypes, filterCategory]
+  );
+
+  // Kalau kategori diganti dan jenis yang lagi dipilih bukan bagian dari
+  // kategori itu, reset filter jenis supaya tidak "nyangkut" ke opsi tak valid.
+  useEffect(() => {
+    if (filterType && !availableTypes.some((t) => t.id === filterType)) {
+      setFilterType("");
+    }
+  }, [availableTypes, filterType]);
+
+  const isFiltering = Boolean(filterCategory || filterType);
 
   // ─── Year tab state ───────────────────────────────────────────────────────
   const years = useMemo(
@@ -1133,18 +1207,25 @@ export default function DistributionsTable({
     }
   }, [showCreate]);
 
-  // ─── Filter: tahun aktif + search ────────────────────────────────────────
+  // ─── Filter: tahun aktif + kategori/jenis + search ─────────────────────────
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
     return distributions
       .filter((d) => d.distributed_date.startsWith(activeYear))
+      .filter((d) => {
+        if (!filterCategory && !filterType) return true;
+        const info = getDistDocInfo(d);
+        if (filterCategory && info.category_id !== filterCategory) return false;
+        if (filterType && info.type_id !== filterType) return false;
+        return true;
+      })
       .filter(
         (d) =>
           d.form_number.toLowerCase().includes(q) ||
           (d.handed_by_dept?.name.toLowerCase().includes(q) ?? false) ||
           (d.handed_by_dept?.code.toLowerCase().includes(q) ?? false)
       );
-  }, [distributions, activeYear, search]);
+  }, [distributions, activeYear, search, filterCategory, filterType]);
 
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
   const paginated = filtered.slice(
@@ -1181,6 +1262,12 @@ export default function DistributionsTable({
     return Array.from(map.values());
   }
 
+  function resetFilter() {
+    setFilterCategory("");
+    setFilterType("");
+    setCurrentPage(1);
+  }
+
   return (
     <div className="space-y-5">
       {/* Stat card */}
@@ -1196,6 +1283,16 @@ export default function DistributionsTable({
             {distributions.length}
           </p>
         </div>
+        {isFiltering && (
+          <div className="ml-auto text-right">
+            <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">
+              Sesuai Filter ({activeYear})
+            </p>
+            <p className="text-2xl font-bold text-blue-600">
+              {filtered.length}
+            </p>
+          </div>
+        )}
       </div>
 
       {/* ─── Year Tabs ─────────────────────────────────────────────────────── */}
@@ -1205,6 +1302,65 @@ export default function DistributionsTable({
         distributions={distributions}
         onSelect={handleYearSelect}
       />
+
+      {/* ─── Filter kategori & jenis dokumen ──────────────────────────────── */}
+      <div className="bg-white border border-slate-200 rounded-2xl p-3 shadow-sm">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 uppercase tracking-wide shrink-0">
+            <FunnelIcon className="w-3.5 h-3.5" />
+            Filter
+          </div>
+
+          <select
+            value={filterCategory}
+            onChange={(e) => {
+              setFilterCategory(e.target.value);
+              setCurrentPage(1);
+            }}
+            className="border border-slate-200 rounded-xl px-3 py-2 text-xs bg-white outline-none focus:border-blue-400 transition-all"
+          >
+            <option value="">Semua Kategori</option>
+            {categories.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={filterType}
+            onChange={(e) => {
+              setFilterType(e.target.value);
+              setCurrentPage(1);
+            }}
+            className="border border-slate-200 rounded-xl px-3 py-2 text-xs bg-white outline-none focus:border-blue-400 transition-all"
+          >
+            <option value="">Semua Jenis Dokumen</option>
+            {availableTypes.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
+          </select>
+
+          {isFiltering && (
+            <button
+              type="button"
+              onClick={resetFilter}
+              className="flex items-center gap-1 text-xs font-medium text-slate-400 hover:text-red-500 transition-colors"
+            >
+              <XMarkIcon className="w-3.5 h-3.5" />
+              Reset filter
+            </button>
+          )}
+
+          {isFiltering && (
+            <span className="ml-auto text-xs font-medium text-blue-600 bg-blue-50 px-2.5 py-1 rounded-full border border-blue-100">
+              {filtered.length} form ditemukan
+            </span>
+          )}
+        </div>
+      </div>
 
       {/* Toolbar */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
@@ -1279,8 +1435,8 @@ export default function DistributionsTable({
                     colSpan={6}
                     className="px-6 py-12 text-center text-slate-400 text-sm"
                   >
-                    {search
-                      ? `Tidak ada form yang cocok dengan pencarian "${search}" di tahun ${activeYear}.`
+                    {search || isFiltering
+                      ? `Tidak ada form yang cocok dengan filter/pencarian di tahun ${activeYear}.`
                       : `Belum ada form distribusi di tahun ${activeYear}.`}
                   </td>
                 </tr>
@@ -1422,8 +1578,8 @@ export default function DistributionsTable({
       <div className="sm:hidden space-y-2">
         {paginated.length === 0 && (
           <div className="bg-white border border-slate-200 rounded-2xl p-6 text-center text-slate-400 text-sm">
-            {search
-              ? `Tidak ada form yang cocok dengan pencarian "${search}" di tahun ${activeYear}.`
+            {search || isFiltering
+              ? `Tidak ada form yang cocok dengan filter/pencarian di tahun ${activeYear}.`
               : `Belum ada form distribusi di tahun ${activeYear}.`}
           </div>
         )}
@@ -1553,6 +1709,7 @@ export default function DistributionsTable({
           }}
           departments={departments}
           docOptions={docOptions}
+          allDocOptions={docOptions}
           createdBy={currentUserId}
           initialFormNumber={nextFormNumber}
         />
@@ -1565,6 +1722,7 @@ export default function DistributionsTable({
           onClose={() => setEditItem(null)}
           departments={departments}
           docOptions={docOptions}
+          allDocOptions={docOptions}
           defaultValues={editItem}
           createdBy={currentUserId}
         />

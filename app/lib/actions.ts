@@ -565,21 +565,251 @@ export async function updateDocument(id: string, formData: FormData) {
   }
 }
 
-export async function permanentDeleteDocument(id: string) {
+// ============================================================
+// PERMANENT DELETE DOCUMENT
+// ============================================================
+// CATATAN PERBAIKAN:
+// Sebelumnya fungsi ini hanya menghapus document_files lalu langsung
+// menghapus baris di `documents`, tanpa mengecek apakah dokumen masih
+// direferensikan oleh tabel lain lewat foreign key, misalnya:
+//   - distribution_items.document_id  (dokumen pernah didistribusikan)
+//   - documents.parent_id             (dokumen ini adalah induk dari
+//                                       revisi yang lebih baru)
+// Kalau masih direferensikan, Postgres akan menolak DELETE dengan error
+// code 23503 (foreign key violation). Sebelumnya error ini tertelan diam-
+// diam oleh handleDelete() di UI, sehingga terasa seperti "dokumen tidak
+// bisa dihapus tanpa alasan". Sekarang errornya ditangkap dan dikembalikan
+// dengan pesan yang jelas ke pemanggil (lihat documents-client.tsx).
+// ============================================================
+// SOFT-DELETE SATU REVISI (ubah status jadi "dihapus")
+// ============================================================
+// Berbeda dengan permanentDeleteDocument (yang benar-benar menghapus baris
+// dari database dan bisa gagal karena foreign key seperti parent_id atau
+// distribution_items), fungsi ini HANYA mengubah kolom `status` dokumen
+// menjadi "dihapus". Baris tetap ada di database, jadi tidak akan pernah
+// bentrok dengan constraint apa pun. Dokumen otomatis "pindah" ke halaman
+// Trash (karena query utama hanya mengambil status "terbaru"/"kadaluarsa"),
+// dan tetap bisa dipulihkan lewat restoreDocument kalau ternyata salah.
+//
+// PENTING: hanya mengubah baris dengan id ini saja (bukan seluruh keluarga
+// doc_number seperti pada correctDocument), supaya revisi lain (misalnya
+// yang masih "terbaru") tidak ikut terpengaruh.
+export async function markDocumentAsDeleted(id: string) {
   try {
-    await supabaseAdmin.from("document_files").delete().eq("document_id", id);
+    const { data: doc, error: fetchError } = await supabaseAdmin
+      .from("documents")
+      .select("id, status")
+      .eq("id", id)
+      .single();
+
+    if (fetchError || !doc) return { error: "Dokumen tidak ditemukan." };
+
+    if (doc.status === "dihapus") {
+      return { error: "Dokumen ini sudah berstatus dihapus." };
+    }
+
     const { error } = await supabaseAdmin
       .from("documents")
-      .delete()
+      .update({ status: "dihapus", updated_at: new Date().toISOString() })
       .eq("id", id);
-    if (error) return { error: "Gagal menghapus dokumen." };
+
+    if (error) {
+      console.error("Gagal mengubah status ke dihapus:", error);
+      return { error: "Gagal mengubah status dokumen." };
+    }
+
     revalidatePath("/dashboard/documents");
     revalidatePath("/dashboard/dokumen-qesh");
     revalidatePath("/dashboard/msds");
     revalidatePath("/dashboard/dokumen-eksternal");
+    revalidatePath("/dashboard/documents/trash");
     return { success: true };
-  } catch {
+  } catch (err) {
+    console.error("Exception saat mengubah status dokumen:", err);
+    return { error: "Gagal mengubah status dokumen." };
+  }
+}
+
+export async function permanentDeleteDocument(id: string) {
+  try {
+    // Cek dulu apakah dokumen ini masih menjadi "induk" (parent) dari
+    // revisi lain. Kalau ya, kita tolak sejak awal dengan pesan yang jelas
+    // sebelum mencoba DELETE (supaya pesannya lebih spesifik daripada
+    // pesan generic dari Postgres).
+    const { data: children } = await supabaseAdmin
+      .from("documents")
+      .select("id, doc_number, revision")
+      .eq("parent_id", id)
+      .limit(1);
+
+    if (children && children.length > 0) {
+      return {
+        error:
+          "Dokumen ini tidak bisa dihapus permanen karena masih menjadi induk dari revisi dokumen lain. Hapus/atur revisi yang lebih baru terlebih dahulu.",
+      };
+    }
+
+    // Cek apakah dokumen ini masih dipakai di data distribusi.
+    const { data: distItems } = await supabaseAdmin
+      .from("distribution_items")
+      .select("id")
+      .eq("document_id", id)
+      .limit(1);
+
+    if (distItems && distItems.length > 0) {
+      return {
+        error:
+          "Dokumen ini tidak bisa dihapus permanen karena masih terkait dengan data distribusi. Hapus dulu dokumen ini dari distribusi terkait sebelum menghapus permanen.",
+      };
+    }
+
+    // Hapus file lampiran dokumen dulu.
+    const { error: fileDeleteError } = await supabaseAdmin
+      .from("document_files")
+      .delete()
+      .eq("document_id", id);
+
+    if (fileDeleteError) {
+      console.error("Gagal menghapus document_files:", fileDeleteError);
+      return { error: "Gagal menghapus file lampiran dokumen." };
+    }
+
+    // Hapus dokumen utama.
+    const { error } = await supabaseAdmin
+      .from("documents")
+      .delete()
+      .eq("id", id);
+
+    if (error) {
+      console.error("Gagal menghapus dokumen:", error);
+
+      // 23503 = foreign key violation di Postgres. Kalau lolos dari 2
+      // pengecekan manual di atas tapi masih kena constraint lain yang
+      // belum kita cek eksplisit, tetap beri pesan yang informatif.
+      if (error.code === "23503") {
+        return {
+          error:
+            "Dokumen tidak bisa dihapus karena masih terkait dengan data lain (misalnya revisi dokumen atau distribusi). Lepaskan keterkaitan tersebut terlebih dahulu.",
+        };
+      }
+
+      return { error: "Gagal menghapus dokumen." };
+    }
+
+    revalidatePath("/dashboard/documents");
+    revalidatePath("/dashboard/dokumen-qesh");
+    revalidatePath("/dashboard/msds");
+    revalidatePath("/dashboard/dokumen-eksternal");
+    revalidatePath("/dashboard/documents/trash");
+    return { success: true };
+  } catch (err) {
+    console.error("Exception saat menghapus dokumen:", err);
     return { error: "Gagal menghapus dokumen." };
+  }
+}
+
+// ============================================================
+// FORCE DELETE — hapus permanen + putus semua keterkaitan
+// ============================================================
+// Dipakai HANYA untuk kasus dokumen yang benar-benar salah input dan
+// memang harus lenyap total, tapi permanentDeleteDocument() gagal karena
+// masih terikat data lain. Fungsi ini secara eksplisit:
+//   1. Memutus tautan revisi — set parent_id = null pada dokumen lain
+//      yang menunjuk ke dokumen ini (supaya dokumen anak TIDAK ikut
+//      terhapus, hanya kehilangan referensi ke induknya).
+//   2. Menghapus baris distribution_recipients & distribution_items yang
+//      mereferensikan dokumen ini (riwayat distribusi dokumen ini akan
+//      hilang, tapi form distribusi/dokumen lain di dalamnya tetap aman).
+//   3. Menghapus document_files milik dokumen ini.
+//   4. Menghapus baris dokumennya sendiri.
+//
+// PERINGATAN: langkah 1 & 2 mengubah/menghapus data lain secara permanen.
+// Sebaiknya hanya dipanggil setelah user benar-benar mengonfirmasi lewat
+// UI (lihat ForceDeleteModal / confirmasi berlapis di documents-client.tsx),
+// bukan dipakai sebagai pengganti default permanentDeleteDocument().
+export async function forceDeleteDocument(id: string) {
+  try {
+    // 1. Putuskan tautan revisi anak (kalau dokumen ini masih jadi induk)
+    const { error: unlinkError } = await supabaseAdmin
+      .from("documents")
+      .update({ parent_id: null })
+      .eq("parent_id", id);
+
+    if (unlinkError) {
+      console.error("Gagal memutus tautan revisi:", unlinkError);
+      return { error: "Gagal memutus tautan ke revisi dokumen lain." };
+    }
+
+    // 2. Hapus data distribusi yang masih mereferensikan dokumen ini
+    const { data: distItems, error: distFetchError } = await supabaseAdmin
+      .from("distribution_items")
+      .select("id")
+      .eq("document_id", id);
+
+    if (distFetchError) {
+      console.error("Gagal mengambil data distribusi:", distFetchError);
+      return { error: "Gagal memeriksa data distribusi terkait." };
+    }
+
+    if (distItems && distItems.length > 0) {
+      const itemIds = distItems.map((d) => d.id);
+
+      const { error: recipError } = await supabaseAdmin
+        .from("distribution_recipients")
+        .delete()
+        .in("distribution_item_id", itemIds);
+
+      if (recipError) {
+        console.error("Gagal menghapus penerima distribusi:", recipError);
+        return { error: "Gagal menghapus data penerima distribusi terkait." };
+      }
+
+      const { error: itemError } = await supabaseAdmin
+        .from("distribution_items")
+        .delete()
+        .eq("document_id", id);
+
+      if (itemError) {
+        console.error("Gagal menghapus item distribusi:", itemError);
+        return { error: "Gagal menghapus data distribusi terkait." };
+      }
+    }
+
+    // 3. Hapus file lampiran dokumen
+    const { error: fileError } = await supabaseAdmin
+      .from("document_files")
+      .delete()
+      .eq("document_id", id);
+
+    if (fileError) {
+      console.error("Gagal menghapus document_files:", fileError);
+      return { error: "Gagal menghapus file lampiran dokumen." };
+    }
+
+    // 4. Hapus dokumen utama
+    const { error } = await supabaseAdmin
+      .from("documents")
+      .delete()
+      .eq("id", id);
+
+    if (error) {
+      console.error("Gagal hapus paksa dokumen:", error);
+      return {
+        error:
+          "Dokumen tetap gagal dihapus meskipun sudah dipaksa. Kemungkinan ada relasi lain yang belum tertangani — hubungi administrator database.",
+      };
+    }
+
+    revalidatePath("/dashboard/documents");
+    revalidatePath("/dashboard/dokumen-qesh");
+    revalidatePath("/dashboard/msds");
+    revalidatePath("/dashboard/dokumen-eksternal");
+    revalidatePath("/dashboard/documents/trash");
+    revalidatePath("/distributions");
+    return { success: true };
+  } catch (err) {
+    console.error("Exception saat force delete dokumen:", err);
+    return { error: "Gagal menghapus paksa dokumen." };
   }
 }
 
@@ -1055,13 +1285,6 @@ export async function parseImportData(
       }
 
       // ── Production Type (khusus MSDS Kimia) — OPTIONAL ──
-      // Kolom ini tidak wajib diisi. Placeholder umum seperti "-", "N/A",
-      // atau kosong dianggap SENGAJA tidak diisi -> production_type = null,
-      // TANPA warning (ini kasus normal, bukan kesalahan input).
-      // Kalau ada nilai yang diisi tapi BUKAN placeholder dan BUKAN salah
-      // satu nilai valid (kemungkinan typo, misal "produksi"), baris tetap
-      // lolos diimport dengan production_type = null, tapi diberi warning
-      // di preview supaya user sadar ada kemungkinan typo.
       let production_type: string | undefined;
       if (isMsdsKimia) {
         const ptRaw = String(raw["Production Type"] ?? "").trim();
@@ -1126,9 +1349,6 @@ export async function importDocuments(
       department_id: r.department_id ?? null,
       revision: r.revision,
       effective_date: r.effective_date ?? null,
-      // Pengaman tambahan: pastikan production_type yang masuk ke insert
-      // selalu melalui normalizeProductionType, walau seharusnya sudah
-      // divalidasi & dinormalisasi sejak tahap parseImportData.
       revision_date: r.revision_date ?? null,
       expiry_date: r.expiry_date ?? null,
       production_type: normalizeProductionType(r.production_type ?? null),
@@ -1665,19 +1885,12 @@ export async function deleteCustomer(id: string) {
 // HELPER: parse tanggal fleksibel dari Excel
 // Mendukung format: DD/MM/YYYY, MM/YYYY, atau YYYY saja.
 // Jika bagian tanggal/bulan tidak diisi, di-padding ke 01.
-// Contoh:
-//   "18/06/2026" -> "2026-06-18"
-//   "06/2026"    -> "2026-06-01"
-//   "2026"       -> "2026-01-01"
-//   2026 (number)-> "2026-01-01"  (Excel kadang baca tahun sebagai number)
 // ============================================================
 function parseDateFlexible(value: unknown): string | null {
   if (value === null || value === undefined) return null;
 
   // Excel serial date number (tanggal lengkap dari date picker)
   if (typeof value === "number") {
-    // Heuristik: serial date Excel biasanya > 10000 (tahun 1927+).
-    // Kalau angkanya kecil (misal 2026), anggap itu input tahun polos, bukan serial date.
     if (value > 10000) {
       const date = new Date((value - 25569) * 86400 * 1000);
       return date.toISOString().split("T")[0];
@@ -1721,28 +1934,24 @@ function parseDateFlexible(value: unknown): string | null {
 }
 
 // ============================================================
-// IMPORT EXTERNAL DOCUMENTS — TYPES (tidak berubah dari sebelumnya,
-// kecuali doc_number sekarang opsional secara semantik untuk KAL)
+// IMPORT EXTERNAL DOCUMENTS — TYPES
 // ============================================================
 
 export type ExternalImportRow = {
-  // Kolom universal
-  doc_number: string; // boleh kosong khusus untuk KAL
+  doc_number: string;
   title: string;
   status: string;
-  source: string | null; // dari kolom "Keterangan"
-  // Per jenis
-  effective_date?: string; // COA, DIU(dihapus), TES, ITP
-  revision?: number; // ITP
-  test_report_no?: string; // TES
-  expiry_date?: string; // KAL
-  no_order?: string; // KAL — sekarang jadi unique key untuk KAL
-  item_type?: string; // KAL
-  brand?: string; // KAL
-  model?: string; // KAL
-  serial_no?: string; // KAL
-  calibration_date?: string; // KAL
-  // Metadata (diisi server)
+  source: string | null;
+  effective_date?: string;
+  revision?: number;
+  test_report_no?: string;
+  expiry_date?: string;
+  no_order?: string;
+  item_type?: string;
+  brand?: string;
+  model?: string;
+  serial_no?: string;
+  calibration_date?: string;
   type_id: string;
   category_id: string;
   uploaded_by: string;
@@ -1763,11 +1972,6 @@ export type ParseExternalResult =
     }
   | { success: false; error: string };
 
-// Kolom wajib per jenis
-// Perubahan:
-//   - COA: "Status" dihapus dari kolom wajib (kolom Status tidak ada di template COA)
-//   - DIU: "Tanggal" diganti "Keterangan"
-//   - KAL: "No. Dokumen" dihapus dari wajib (jadi opsional)
 const EXT_REQUIRED: Record<string, string[]> = {
   coa: ["Judul Dokumen", "No. Dokumen", "Keterangan", "Tanggal"],
   diu: ["Judul Dokumen", "No. Dokumen", "Keterangan", "Status"],
@@ -1795,9 +1999,6 @@ export async function parseExternalImportData(
     const isKal = t === "kal";
     const isCoa = t === "coa";
 
-    // ── Ambil data existing dari DB untuk cek duplikat ──
-    // Untuk KAL, kita cek duplikat berdasarkan No. Order (unique key baru).
-    // Untuk jenis lain, tetap berdasarkan No. Dokumen seperti sebelumnya.
     const excelDocNumbers = rows
       .map((r) => String(r["No. Dokumen"] ?? "").trim())
       .filter(Boolean);
@@ -1828,7 +2029,7 @@ export async function parseExternalImportData(
     const validRows: ExternalImportRow[] = [];
     const errors: ExternalImportRowError[] = [];
     const excelDuplicateTracker = new Set<string>();
-    const START_ROW = 16; // sama seperti MSDS (header 14 baris + 2 baris header tabel)
+    const START_ROW = 16;
 
     rows.forEach((raw, index) => {
       const rowNum = index + START_ROW;
@@ -1838,16 +2039,12 @@ export async function parseExternalImportData(
       const docNumRaw = String(raw["No. Dokumen"] ?? "").trim();
       const noOrderRaw = String(raw["No. Order"] ?? "").trim();
 
-      // Skip baris kosong.
-      // Untuk KAL, baris dianggap kosong kalau Judul & No. Order kosong
-      // (karena No. Dokumen sudah opsional untuk KAL).
       if (isKal) {
         if (!titleRaw && !noOrderRaw) return;
       } else {
         if (!titleRaw && !docNumRaw) return;
       }
 
-      // ── Judul Dokumen (selalu wajib) ──
       if (!titleRaw)
         rowErrors.push({
           row: rowNum,
@@ -1855,8 +2052,6 @@ export async function parseExternalImportData(
           message: "Wajib diisi",
         });
 
-      // ── No. Dokumen ──
-      // Wajib untuk semua jenis KECUALI KAL (opsional di KAL).
       if (!isKal && !docNumRaw)
         rowErrors.push({
           row: rowNum,
@@ -1864,7 +2059,6 @@ export async function parseExternalImportData(
           message: "Wajib diisi",
         });
 
-      // ── No. Order (khusus KAL, wajib & jadi unique key) ──
       if (isKal && !noOrderRaw)
         rowErrors.push({
           row: rowNum,
@@ -1872,7 +2066,6 @@ export async function parseExternalImportData(
           message: "Wajib diisi",
         });
 
-      // ── Keterangan → source ──
       const source = String(raw["Keterangan"] ?? "").trim() || null;
       if (requiredCols.includes("Keterangan") && !source)
         rowErrors.push({
@@ -1881,8 +2074,6 @@ export async function parseExternalImportData(
           message: "Wajib diisi",
         });
 
-      // ── Status ──
-      // COA tidak punya kolom Status di template -> otomatis "terbaru".
       let status: string | undefined;
       if (isCoa) {
         status = "terbaru";
@@ -1899,8 +2090,6 @@ export async function parseExternalImportData(
           });
       }
 
-      // ── Tanggal (COA, TES) ──
-      // Catatan: DIU sudah tidak punya kolom Tanggal, diganti Keterangan.
       let effective_date: string | undefined;
       if (raw["Tanggal"] !== undefined) {
         effective_date = parseDate(raw["Tanggal"]) ?? undefined;
@@ -1912,13 +2101,11 @@ export async function parseExternalImportData(
           });
       }
 
-      // ── Tgl Efektif (ITP) opsional ──
       let itp_effective_date: string | undefined;
       if (raw["Tgl Efektif"] !== undefined) {
         itp_effective_date = parseDate(raw["Tgl Efektif"]) ?? undefined;
       }
 
-      // ── Revisi (ITP) opsional ──
       let revision: number | undefined;
       if (raw["Revisi"] !== undefined) {
         const revRaw = String(raw["Revisi"] ?? "").trim();
@@ -1928,15 +2115,11 @@ export async function parseExternalImportData(
         }
       }
 
-      // ── Test Report No (TES) opsional ──
       const test_report_no =
         raw["Test Report No."] !== undefined
           ? String(raw["Test Report No."] ?? "").trim() || undefined
           : undefined;
 
-      // ── KAL fields ──
-      // Tgl Pengujian/Masa Berlaku dan Tgl Kalibrasi sekarang pakai
-      // parseDateFlexible: boleh DD/MM/YYYY, MM/YYYY, atau YYYY saja.
       let expiry_date: string | undefined;
       let no_order: string | undefined;
       let item_type: string | undefined;
@@ -1963,9 +2146,7 @@ export async function parseExternalImportData(
         calibration_date = parseDateFlexible(raw["Tgl Kalibrasi"]) ?? undefined;
       }
 
-      // ── Cek duplikat ──
       if (isKal) {
-        // Untuk KAL, duplikat dicek berdasarkan No. Order (unique key).
         if (noOrderRaw) {
           const isExistInDb = existingKalOrders.some(
             (k) => String(k.no_order).toLowerCase() === noOrderRaw.toLowerCase()
@@ -2019,7 +2200,7 @@ export async function parseExternalImportData(
         errors.push(...rowErrors);
       } else {
         validRows.push({
-          doc_number: docNumRaw, // boleh string kosong untuk KAL
+          doc_number: docNumRaw,
           title: titleRaw,
           status: status!,
           source: source,
@@ -2067,10 +2248,6 @@ export async function importExternalDocuments(
       const t = row.type_name.toLowerCase();
       const isKal = t === "kal";
 
-      // 1. Insert ke documents
-      // Untuk KAL, doc_number boleh kosong -> simpan sebagai null supaya
-      // tidak melanggar constraint unik doc_number+revision jika ada
-      // beberapa baris KAL tanpa No. Dokumen.
       const { data: doc, error: docError } = await supabaseAdmin
         .from("documents")
         .insert({
@@ -2088,7 +2265,7 @@ export async function importExternalDocuments(
         .single();
 
       if (docError) {
-        if (docError.code === "23505") continue; // skip duplikat
+        if (docError.code === "23505") continue;
         return {
           success: false,
           error: `Gagal insert dokumen "${
@@ -2099,7 +2276,6 @@ export async function importExternalDocuments(
 
       const document_id = doc.id;
 
-      // 2. Insert ke document_external (semua kecuali KAL)
       if (!isKal) {
         const { error: extError } = await supabaseAdmin
           .from("document_external")
@@ -2117,7 +2293,6 @@ export async function importExternalDocuments(
         }
       }
 
-      // 3. Insert ke document_external_kal (khusus KAL)
       if (isKal) {
         const { error: kalError } = await supabaseAdmin
           .from("document_external_kal")
@@ -2132,8 +2307,7 @@ export async function importExternalDocuments(
           });
 
         if (kalError) {
-          // Constraint unik pada no_order (perlu ditambahkan di DB, lihat catatan di bawah)
-          if (kalError.code === "23505") continue; // skip duplikat No. Order
+          if (kalError.code === "23505") continue;
           return {
             success: false,
             error: `Gagal simpan data KAL "${row.no_order}": ${kalError.message}`,
@@ -2157,10 +2331,9 @@ export async function importExternalDocuments(
 }
 
 // ============================================================
-// EMPLOYEES — tambahkan ke app/lib/actions.ts
+// EMPLOYEES
 // ============================================================
 
-// Schema
 const EmployeeSchema = z.object({
   nik: z.string().min(1, "NIK wajib diisi"),
   name: z.string().min(1, "Nama wajib diisi"),
@@ -2168,7 +2341,6 @@ const EmployeeSchema = z.object({
   join_date: z.string().optional().nullable(),
 });
 
-// CREATE
 export async function createEmployee(formData: FormData) {
   const parsed = EmployeeSchema.safeParse({
     nik: formData.get("nik"),
@@ -2194,7 +2366,6 @@ export async function createEmployee(formData: FormData) {
   }
 }
 
-// UPDATE
 export async function updateEmployee(id: string, formData: FormData) {
   const parsed = EmployeeSchema.safeParse({
     nik: formData.get("nik"),
@@ -2227,7 +2398,6 @@ export async function updateEmployee(id: string, formData: FormData) {
   }
 }
 
-// DELETE
 export async function deleteEmployee(id: string) {
   try {
     const { error } = await supabaseAdmin
@@ -2242,7 +2412,6 @@ export async function deleteEmployee(id: string) {
   }
 }
 
-// IMPORT BULK
 export async function importEmployees(
   rows: {
     nik: string;

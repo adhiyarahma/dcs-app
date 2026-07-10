@@ -267,7 +267,7 @@ export async function getDistributions() {
       users(name),
       distribution_items(
         id, distributed_date,
-        documents(id, doc_number, title, revision, document_types(name)),
+        documents(id, doc_number, title, revision, category_id, type_id, document_types(name)),
         distribution_recipients(
           id, qty, head_name,
           departments!distribution_recipients_dept_id_fkey(
@@ -560,5 +560,40 @@ export async function getEmployees() {
     created_at: e.created_at,
     department_code: e.departments?.code ?? "",
     department_name: e.departments?.name ?? "",
+  }));
+}
+
+export async function getAllDocumentsForDistribution() {
+  const PAGE = 1000;
+  let allData: any[] = [];
+  let from = 0;
+
+  while (true) {
+    const { data, error } = await supabaseAdmin
+      .from("documents")
+      .select(
+        `
+        id, doc_number, title, revision, status,
+        document_types(name),
+        departments(code)
+      `
+      )
+      .order("doc_number")
+      .range(from, from + PAGE - 1);
+
+    if (error || !data || data.length === 0) break;
+    allData = [...allData, ...data];
+    if (data.length < PAGE) break;
+    from += PAGE;
+  }
+
+  return allData.map((d: any) => ({
+    id: d.id,
+    doc_number: d.doc_number,
+    title: d.title,
+    revision: d.revision,
+    status: d.status,
+    type_name: d.document_types?.name ?? "",
+    dept_code: d.departments?.code ?? "",
   }));
 }

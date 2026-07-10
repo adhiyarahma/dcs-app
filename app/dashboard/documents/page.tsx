@@ -90,7 +90,7 @@ export default async function Page() {
         categories={categories}
         departments={departments}
         documentTypes={documentTypes}
-        role="viewer"
+        role={role}
         userId={userId}
         basePath="/dashboard/documents"
       />
